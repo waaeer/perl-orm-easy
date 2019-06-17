@@ -1,0 +1,2 @@
+CREATE SEQUENCE orm.id_seq START WITH 17659;
+
