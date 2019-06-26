@@ -11,9 +11,10 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
     ## toDo надо обработать ситуацию отсутствия этой функции
 
 #	warn "try $schema.can_delete_$tablename\n";
-    my $can = ORM::Easy::SPI::spi_run_query('select '.quote_ident($schema).'.'.quote_ident("can_delete_$tablename").'($1,$2) as x', ['bigint', 'text'], [$user_id, $id]);
-    unless($can && $can->{rows}->[0]->{x}) {  
-        die("Not allowed: delete to $tablename");
+    if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
+			[ 'name', 'name'], [ $schema, "can_delete_$tablename"])) {
+		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_delete_$tablename").'($1,$2,$3)', ['bigint', 'text'], [$user_id, $id])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete'}));
     }
 
 
