@@ -145,7 +145,7 @@ CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id int8, grantee_i
 				INSERT INTO auth.user_roles ("user",role, created_by) VALUES (grantee_id, _add[i], user_id) ON CONFLICT DO NOTHING;
 			END LOOP;
 			FOR i IN 1 .. COALESCE(array_length(_del,1),0) LOOP
-				DELETE FROM auth.user_roles WHERE "user" = grantee_id AND role = _del[i]; -- todo: who?
+				DELETE FROM auth.user_roles WHERE "user" = grantee_id AND id = _del[i]; -- todo: who?
 			END LOOP;
 			RETURN json_build_object('ok',1);
 		ELSE 
