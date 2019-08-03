@@ -7,7 +7,7 @@ Build-Depends-Indep: perl
 Standards-Version: 3.9.8
 Homepage: https://metacpan.org/release/ORM-Easy
 
-Package: libwww-easy-perl
+Package: liborm-easy-perl
 Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends}, 
   libjson-xs-perl, libtime-hires-perl, libhash-merge-perl, liblist-util-perl
