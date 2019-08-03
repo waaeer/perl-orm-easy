@@ -1,0 +1,16 @@
+Source: liborm-easy-perl
+Section: perl
+Priority: optional
+Maintainer: Ivan Panchenko <wao@mail.ru>
+Build-Depends: debhelper (>= 9)
+Build-Depends-Indep: perl
+Standards-Version: 3.9.8
+Homepage: https://metacpan.org/release/ORM-Easy
+
+Package: libwww-easy-perl
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends}, 
+  libjson-xs-perl, libtime-hires-perl, libhash-merge-perl, liblist-util-perl
+Description: Minimalistic perl in-database Postgres CRM
+  Uses PL/Perl
+
