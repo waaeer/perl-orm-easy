@@ -2,7 +2,6 @@ debian/changelog
 debian/compat
 debian/control
 debian/copyright
-debian/files
 debian/liborm-easy-perl.docs
 debian/rules
 debian/source/format
