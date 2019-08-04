@@ -10,7 +10,7 @@ Homepage: https://metacpan.org/release/ORM-Easy
 Package: liborm-easy-perl
 Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends}, 
-  libjson-xs-perl, libtime-hires-perl, libhash-merge-perl, liblist-util-perl
+  libjson-xs-perl, libtime-hires-perl, libhash-merge-perl
 Description: Minimalistic perl in-database Postgres CRM
   Uses PL/Perl
 
