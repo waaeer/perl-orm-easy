@@ -1,4 +1,4 @@
-DROP view auth.user_privileges;
+DROP VIEW iF EXISTS auth.user_privileges;
 CREATE OR REPLACE VIEW auth.user_privileges AS 
 	SELECT ur."user",
 		   rp.role,
@@ -63,7 +63,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION auth_interface.check_privilege( int8, text, text[]) TO intranet;
 
-DROP TYPE auth_interface.checked_privileges CASCADE;
+DROP TYPE IF EXISTS auth_interface.checked_privileges CASCADE;
 DO $$ 
 	BEGIN IF NOT EXISTS (select * from pg_type WHERE typname='checked_privileges') THEN 
 		CREATE TYPE auth_interface.checked_privileges AS (privilege_name text, object_ids text[]);
