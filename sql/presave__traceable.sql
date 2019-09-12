@@ -1,6 +1,6 @@
 
 
-CREATE OR REPLACE FUNCTION orm.presave__traceable(user_id bigint, id_ bigint,op_ text, old_data JSONB, data JSONB, schema text, tablename text) RETURNS JSONB LANGUAGE PLPGSQL AS $$
+CREATE OR REPLACE FUNCTION orm.presave__traceable(user_id idtype, id_ idtype,op_ text, old_data JSONB, data JSONB, schema text, tablename text) RETURNS JSONB LANGUAGE PLPGSQL AS $$
 	DECLARE 
 		changes JSONB;
 	BEGIN

@@ -24,9 +24,9 @@ CREATE OR REPLACE VIEW auth.user_privileges AS
 */
 
 CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
-	RETURNS int8 LANGUAGE PLPGSQL IMMUTABLE STRICT  AS $$
+	RETURNS idtype LANGUAGE PLPGSQL IMMUTABLE STRICT  AS $$
 	DECLARE arr text[];
-			id int8; sql text;
+			id idtype; sql text;
 	BEGIN
 		IF name ~ '^\d+$' THEN 
 			RETURN name::int;
@@ -45,7 +45,7 @@ CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
 	END;
 $$;
 
-CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id int8, privilege_name text, object_ids text[] = NULL) 
+CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id idtype, privilege_name text, object_ids text[] = NULL) 
 	RETURNS bool LANGUAGE SQL SECURITY DEFINER AS $$
 	SELECT EXISTS(SELECT * FROM auth.user_privileges up 
 		JOIN auth.privilege p ON p.id = up.privilege 
@@ -61,7 +61,9 @@ CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id int8, privileg
 	);
 $$;
 
-GRANT EXECUTE ON FUNCTION auth_interface.check_privilege( int8, text, text[]) TO intranet;
+
+
+
 
 DROP TYPE IF EXISTS auth_interface.checked_privileges CASCADE;
 DO $$ 
@@ -72,7 +74,7 @@ DO $$
 $$;
 
 
-CREATE OR REPLACE FUNCTION auth_interface.check_privileges (user_id int8, privileges json) 
+CREATE OR REPLACE FUNCTION auth_interface.check_privileges (user_id idtype, privileges json) 
 	RETURNS SETOF auth_interface.checked_privileges LANGUAGE sql AS $$
 	SELECT *
 		FROM ( SELECT 
@@ -87,11 +89,11 @@ CREATE OR REPLACE FUNCTION auth_interface.check_privileges (user_id int8, privil
 $$;
 
 
-CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id int8, grantee_id int8, role_ text, objects_ int8[]) RETURNS VOID SECURITY DEFINER LANGUAGE PLPGSQL AS $$
-	DECLARE role_id INT8; 
+CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id idtype, grantee_id idtype, role_ text, objects_ idtype[]) RETURNS VOID SECURITY DEFINER LANGUAGE PLPGSQL AS $$
+	DECLARE role_id idtype; 
 	        can_do BOOL;
 			role_checker TEXT;
-			inserted_id INT8;
+			inserted_id idtype;
 	BEGIN
 		SELECT id INTO role_id FROM auth.role WHERE name = role_;
 		IF NOT FOUND THEN
@@ -114,7 +116,7 @@ CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id int8, grantee_id int8
 $$;
 
 
-CREATE OR REPLACE FUNCTION auth_interface.get_roles_addable(user_id int8, grantee_id int8)  RETURNS json SECURITY DEFINER LANGUAGE PLPGSQL AS $$
+CREATE OR REPLACE FUNCTION auth_interface.get_roles_addable(user_id idtype, grantee_id idtype)  RETURNS json SECURITY DEFINER LANGUAGE PLPGSQL AS $$
 	DECLARE ret json; 
 	BEGIN
 		-- на какие роли у меня есть привилегия добавлять?
@@ -133,10 +135,8 @@ CREATE OR REPLACE FUNCTION auth_interface.get_roles_addable(user_id int8, grante
 
 $$;
 
-GRANT EXECUTE ON FUNCTION auth_interface.get_roles_addable(int8,int8) TO intranet;
-
-CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id int8, grantee_id int8, _add int8[], _del int8[])  RETURNS json SECURITY DEFINER LANGUAGE PLPGSQL AS $$
-	DECLARE i INT8; 
+CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id idtype, grantee_id idtype, _add idtype[], _del idtype[])  RETURNS json SECURITY DEFINER LANGUAGE PLPGSQL AS $$
+	DECLARE i idtype; 
 	BEGIN
 		-- сейчас мы не заморачиваемся с этим, и считаем, что одна привилегия "админа" дает право добавлять все роли.
 
@@ -156,5 +156,4 @@ CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id int8, grantee_i
 
 $$;
 
-GRANT EXECUTE ON FUNCTION auth_interface.mod_user_roles( int8, int8, int8[], int8[]) TO intranet;
 

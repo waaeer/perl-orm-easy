@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_id bigint, page int, pagesize int, query jsonb) 
+CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_id idtype, page int, pagesize int, query jsonb) 
 	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS 
 $perl$
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
@@ -6,20 +6,15 @@ $perl$
 
 
   # контроль доступа. В перспективе - более гранулярный
-  my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['int' , 'text' ], [$user_id, $table ]);
+  my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
   if(!$can_see) { 
 		die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename",  action=>'view'}));
   }
   $page ||= 1;
 
-  my $offset = ($page-1)*$pagesize;
+  my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
   my $q = {wheres=>[], bind=>[], select=>['m.*'], joins=>[], order=>[], types=>[]};
-
-
-# простые поля
-#  ...
-
 
 
 # smart pre-triggers for all superclasses
@@ -33,32 +28,89 @@ $perl$
 		warn "call $o->{schema}.query_$o->{tablename} $q $query\n";
 		$q = ORM::Easy::SPI::spi_run_query_expr( 
 					quote_ident($o->{schema}).'.'.quote_ident("query_$o->{tablename}").'($1, $2, $3)',
-					[ 'int8', 'jsonb', 'jsonb'],
+					[ 'idtype', 'jsonb', 'jsonb'],
 					[ $user_id, $q, $query ] 
 		);
 		warn "done $o->{schema}.query_$o->{tablename} c=\n";
 
 	}
   }
-  
-#warn "q,sel=", Data::Dumper::Dumper($q);
-  if(my $id = $query->{id}) { 
-	push @{$q->{wheres}}, sprintf('m.id=$%d', $#{$q->{bind}}+2 );
-	push @{$q->{types}}, 'int8';
-	push @{$q->{bind}},  $id;
+# простые поля
+#  ...
+  my @order_fields;
+  if(my $ord = $query->{_order}) {
+	foreach my $ordf (ref($ord) ? @$ord : $ord) { 
+		my $dir = '';
+		if($ordf =~ /^\-(.*)$/) { 
+			$dir = ' DESC'; $ordf = $1;
+		}
+		push @order_fields, [$ordf,$dir];
+	}
   }
+
+#warn "DuDa=", Data::Dumper::Dumper(\@order_fields, [(keys %$query), map { $_->[0] } @order_fields]);
+  my $field_types = ORM::Easy::SPI::spi_run_query(q!
+		SELECT attname, 
+			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = typnamespace)::text,  typname::text,  typtype::text] AS t 
+			 FROM pg_type WHERE oid=atttypid
+			) 
+		FROM pg_attribute 
+		WHERE attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) 
+		  AND attnum>0
+		  AND attname::text = ANY($3)
+	!, ['text', 'text', 'text[]'], [$schema, $tablename, [(keys %$query), map { $_->[0] } @order_fields] ]);
+
+  my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
+
+  foreach my $f (keys %$query) { 
+	if(my $type = $field_types_by_attr{$f}) {
+		my $v = $query->{$f};
+		push @{$q->{wheres}}, sprintf('m.%s=$%d', quote_ident($f), $#{$q->{bind}}+2 );
+		push @{$q->{types}}, $type->[0].'.'.$type->[1];
+		push @{$q->{bind}},  $v;
+	}
+  }
+  # order
+  foreach my $ord (@order_fields) { 
+	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
+		push @{$q->{order} ||= []},  quote_ident($ord->[0]).$ord->[1];
+	} else { 
+		warn Data::Dumper::Dumper(\%field_types_by_attr);
+		die("Unknown order expression '$ord'");
+	}
+  }
+
+  if(my $s=$query->{with_permissions}) { 
+	my $bb = $#{$q->{bind}} + 2;
+	push @{$q->{select}}, sprintf(q!
+		 orm.can_update_object($%d, $%d, m.id::text, NULL) as can_edit,
+		 orm.can_delete_object($%d, $%d, m.id::text) as can_delete
+	!, $bb, $bb+1, $bb, $bb+1 );
+	push @{$q->{types}}, 'idtype', 'text';
+    push @{$q->{bind}},  $user_id, "$schema.$tablename";
+  }
+
+
+warn "q,sel=", Data::Dumper::Dumper($q, $query);
+
 
   my $where = @{$q->{wheres}} ? 'WHERE '.join(' AND ', @{$q->{wheres}}) : '';
   my $order = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
   my $sel   = join(', ', @{$q->{select}});
   my $join  = @{$q->{joins}} ? ' JOIN '. join('  ', @{$q->{joins}}) : '';
-  
-  my $sql  = sprintf("SELECT $sel FROM $table m $join $where $order LIMIT \$%d OFFSET \$%d", $#{$q->{bind}}+2, $#{$q->{bind}}+3);
+  my ($limit,@pagebind,@pagetypes) = ('');
+  if($pagesize) { 
+	  $limit = sprintf("LIMIT \$%d OFFSET \$%d", $#{$q->{bind}}+2, $#{$q->{bind}}+3);
+ 	  push @pagebind, $pagesize, $offset;
+	  push @pagetypes, 'int', 'int';
+  }
+
+  my $sql  = "SELECT $sel FROM $table m $join $where $order $limit";
   my $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
 
-warn "sql=$sql\n";
+warn "sql=$sql\n", Data::Dumper::Dumper($q,\@pagetypes,\@pagebind);
   my %ret;
-  $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, 'int','int'], [@{$q->{bind}}, $pagesize, $offset] )->{rows};
+  $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
   unless ($query->{without_count}) { 
 	$ret{total} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }

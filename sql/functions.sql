@@ -1,11 +1,12 @@
 CREATE EXTENSION plperl;
 CREATE EXTENSION jsonb_plperl;
 
-CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb STABLE LANGUAGE plperl AS $$
+CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb 
+		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS $$
 	my ($o, $path, $v, $to_create) = @_;
-	my $json = JSON::XS->new->allow_nonref;	
-	$o &&= $json->decode(Encode::encode_utf8($o));
-	$v &&= $json->decode(Encode::encode_utf8($v));
+#	my $json = JSON::XS->new->allow_nonref;	
+#	$o &&= $json->decode(Encode::encode_utf8($o));
+#	$v &&= $json->decode(Encode::encode_utf8($v));
 	$path = $path->{array};
 	my $curr_o = \$o;
 	foreach my $x (@$path) { 
@@ -13,7 +14,7 @@ CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb,
 		my $key_is_number =  Scalar::Util::looks_like_number($x);
 		if(!${$curr_o}) { 
 			if(!$to_create) { 
-				return Encode::decode_utf8($json->encode($o)); 
+				return $o; # Encode::decode_utf8($json->encode($o)); 
 			}
 			${$curr_o} = $key_is_number ? [] : {};
 		}
@@ -23,12 +24,13 @@ CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb,
 			$curr_o = \((${$curr_o})->{$x});
 		} else { 
 			warn "key '$x' type mismatch";
-			return Encode::decode_utf8($json->encode($o));
+			return $o; # Encode::decode_utf8($json->encode($o));
 		}
 	}
 	${$curr_o} = $v;
 
-	return Encode::decode_utf8($json->encode($o));
+	return $o;
+#	return Encode::decode_utf8($json->encode($o));
 $$;
 
 
@@ -65,7 +67,7 @@ CREATE OR REPLACE FUNCTION orm.delete_history() RETURNS TRIGGER LANGUAGE PLPGSQL
 $$;
 
 
-CREATE OR REPLACE FUNCTION orm.get_next_id () RETURNS bigint LANGUAGE sql AS $$ select nextval('orm.id_seq'); $$;
+CREATE OR REPLACE FUNCTION orm.get_next_id () RETURNS idtype LANGUAGE sql AS $$ select nextval('orm.id_seq')::idtype; $$;
 
 CREATE OR REPLACE FUNCTION orm.make_triggers(schema text, tbl text) RETURNS void LANGUAGE PLPGSQL AS $$
 	DECLARE 

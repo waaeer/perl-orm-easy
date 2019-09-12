@@ -67,6 +67,7 @@ sub make_new_id {
 sub spi_run_query {  # toDo: cache
 	my ($sql, $types, $values) = @_;
 	if($log_mode) { warn "spi_run_query($sql,$types,$values)\n", Data::Dumper::Dumper($types,$values); } 
+
 	my $h   = ::spi_prepare($sql, @$types);
 	my $ret = ::spi_exec_prepared($h, {},  @$values);
 	## todo: check and log errors
@@ -133,6 +134,34 @@ sub filter_bool {
 	if(defined $v) { 
 		push @{$q->{wheres}}, sprintf('%s %s.%s',($v?'' : 'NOT'), $table_alias,  $fld);
 	}
+}
+
+sub list2tree { 
+  my ($list, $convert) = @_;
+  my $level = 0;
+  my %nodeById;
+  my @top;
+  my %nodeById = 
+		map { my $node =  $convert ? $convert->($_) : $_ ; $node->{id} = $_->{id}; $_->{id} => $node } 
+		@$list;
+  foreach my $node (
+	sort { $a->{pos} <=> $b->{pos} } 
+	values %nodeById
+  ) { 
+		if($node->{parent}) { 	
+			if(my $parent_item = $nodeById{ $node->{parent} }) { 
+				push @{ $parent_item->{children} ||= []}, $node;
+				$node->{level} = $parent_item->{level}+1;
+			} else { 
+				die("Bad tree structure: no parent for $node->{id}");
+			}
+		} else { # top level
+			push @top, $node;
+			$node->{level} = 0;
+		}
+  }	
+
+  return \@top;
 }
 
 
