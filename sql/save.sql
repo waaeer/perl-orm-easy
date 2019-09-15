@@ -13,10 +13,15 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
     my $data = $jsondata; 
     my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname, 
-			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = typnamespace)::text,  typname::text,  typtype::text] AS t 
-			 FROM pg_type WHERE oid=atttypid
+			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = t.typnamespace)::text,  
+				t.typname::text,  t.typtype::text, t.typcategory::text,
+				et.typname::text, et.typcategory::text
+			 ] AS t 
+			 FROM pg_type t 
+			 LEFT JOIN pg_type et ON t.typelem = et.oid
+			 WHERE t.oid=a.atttypid
 			) 
-		FROM pg_attribute 
+		FROM pg_attribute a 
 		WHERE attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) AND attnum>0
 	!, ['text', 'text'], [$schema, $tablename]);
 
@@ -53,7 +58,7 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 		}
 	}
 # form and run SQL
-#  warn "CRM save ", Data::Dumper::Dumper($data);
+  warn "CRM save ", Data::Dumper::Dumper($data);
 
 	if($op ne 'update') { 
 		$data->{id} = $id;
@@ -64,9 +69,9 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 	my $n = 0;
 
 	foreach my $f (@fields) { 
-		my $t = $field_types_by_attr{$f} || die("No such field $f");
+		my $t = $field_types_by_attr{$f} || die("No such field $f; fields are ".join(',', sort keys %field_types_by_attr));
 		my $val = $data->{$f};
-		my ($tschema, $type, $typtype) = @$t;
+		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
 		$n++;
 		$exprs{$f} = "\$$n";
 		if($type eq 'bytea') { 
@@ -76,27 +81,21 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 			push @types, $type;
 			push @args,  defined($val) ? "\\x$val" : undef;
 
-		} elsif ($type eq 'int4' || $type eq 'int8') {  
+		} elsif ($typcat eq 'N') {  
 			push @types, $type;
 			push @args, !defined($val) || $val eq '' ? undef : ($data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids));
 
 		} elsif($type eq 'bool') { 
             $exprs{$f} = defined $val ? ( $val ? 'true' : 'false' )  : 'NULL';
 			$n--;  # does not push args
-		} elsif($type eq 'numeric') { 
-			push @types, $type;
-				# todo: check numeric look
-			push @args,  defined $val && $val ne '' ? $val : undef;
-
 		} elsif ($type =~ /^jsonb?/) { 
 			push @types, $type;
 			push @args,  defined($val) ? $val # ORM::Easy::SPI::to_json($val) 
 			                           : undef;
-
-		} elsif (($type eq '_int4' || $type eq '_int8') && ref($val) eq 'HASH') {
+		} elsif (($typcat eq 'A' && $eltypecat eq 'N') && ref($val) eq 'HASH') {  # для числовых массивов
 			my ($expr_add, $expr_del, $vtype_add, $vtype_del);
 			if(my $v = $val->{add}) {
-				push @types, $type;
+				push @types, "$tschema.$type";
 				push @args,  [ map { !defined($_) || $_ eq '' ? undef : ORM::Easy::SPI::make_new_id($_, $context, \%ids) } (ref($v) eq 'ARRAY' ? @$v : ($v))];
 				$expr_add  =  "+\$${n}::$type";
 			} 
@@ -107,6 +106,9 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 				$expr_del  =  "-\$${n}::$type"; 
 			} 
 			$exprs{$f} = 'coalesce('.quote_ident($f).",'{}'::int[]) " .$expr_add . $expr_del;
+		} elsif (($typcat eq 'A' && $eltypecat eq 'N') && ref($val) eq 'ARRAY') {  # для числовых массивов
+			push @types, $type;
+			push @args, [ map { !defined($_) || $_ eq '' ? undef : ORM::Easy::SPI::make_new_id($_, $context, \%ids) } @$val];			
 		} elsif ($type =~ /^timestamp/) {
 			if ($val eq 'now') {
 				$exprs{$f} = 'now()';
@@ -155,6 +157,7 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 			join(',', map { $exprs{$_} } @fields). ') returning *';
     } 
 
+warn "SQL=$sql\n";
     my $obj = ORM::Easy::SPI::spi_run_query_row($sql, \@types, \@args);
     foreach my $k (keys %$obj) { if (ref($obj->{$k}) eq 'PostgreSQL::InServer::ARRAY') {  $obj->{$k} = $obj->{$k}->{array}; } }
 

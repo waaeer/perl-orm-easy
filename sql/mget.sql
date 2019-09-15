@@ -51,13 +51,20 @@ $perl$
 #warn "DuDa=", Data::Dumper::Dumper(\@order_fields, [(keys %$query), map { $_->[0] } @order_fields]);
   my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname, 
-			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = typnamespace)::text,  typname::text,  typtype::text] AS t 
-			 FROM pg_type WHERE oid=atttypid
+			(SELECT ARRAY[
+					(select nspname from pg_namespace n where n.oid = tp.typnamespace)::text,  
+					typname::text,  typtype::text, typcategory::text, 
+					(select nspname from pg_namespace n where n.oid = sc.relnamespace)::text,  
+					sc.relname
+				] AS t 
+			 FROM pg_type tp WHERE oid=a.atttypid
 			) 
-		FROM pg_attribute 
-		WHERE attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) 
-		  AND attnum>0
-		  AND attname::text = ANY($3)
+		FROM pg_attribute a
+		LEFT JOIN pg_constraint s ON s.conrelid = a.attrelid AND a.attnum = s.conkey[1] AND s.contype = 'f'
+		LEFT JOIN pg_class     sc ON s.confrelid = sc.oid
+		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) 
+		  AND a.attnum>0
+		  AND a.attname::text = ANY($3)
 	!, ['text', 'text', 'text[]'], [$schema, $tablename, [(keys %$query), map { $_->[0] } @order_fields] ]);
 
   my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
@@ -65,18 +72,40 @@ $perl$
   foreach my $f (keys %$query) { 
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
-		push @{$q->{wheres}}, sprintf('m.%s=$%d', quote_ident($f), $#{$q->{bind}}+2 );
-		push @{$q->{types}}, $type->[0].'.'.$type->[1];
-		push @{$q->{bind}},  $v;
+		if(ref($v) eq 'ARRAY') { 
+			push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
+			push @{$q->{types}},  $type->[0].'.'.$type->[1].'[]';
+			push @{$q->{bind}},  $v;
+		} elsif (ref($v) eq 'HASH') { 
+			if(my $vv = $v->{begins}) { 
+				push @{$q->{wheres}}, sprintf(q!m.%s ~* ('^' || $%d)!, quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}}, 'text';
+				push @{$q->{bind}},  $vv;
+			}
+		} else { 
+			# if type is integer, value is not-a-number and the field is referencing another table, resolve it as a referenced object name
+			if($type->[3] eq 'N' && $v && ($ v!~ /^-?\d+/) && $type->[4]) { 
+				push @{$q->{wheres}}, sprintf('m.%s=(SELECT id FROM %s.%s WHERE name=$%d)', 
+					quote_ident($f), quote_ident($type->[4]),  quote_ident($type->[5]), $#{$q->{bind}}+2 
+				);
+				push @{$q->{types}}, 'text';
+				push @{$q->{bind}},  $v;
+			} else {
+				push @{$q->{wheres}}, sprintf('m.%s=$%d', quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}}, $type->[0].'.'.$type->[1];
+				push @{$q->{bind}},  $v;
+			}
+		}
 	}
   }
   # order
+warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
   foreach my $ord (@order_fields) { 
 	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
 		push @{$q->{order} ||= []},  quote_ident($ord->[0]).$ord->[1];
 	} else { 
 		warn Data::Dumper::Dumper(\%field_types_by_attr);
-		die("Unknown order expression '$ord'");
+		die("Unknown order expression '$ord->[0]'");
 	}
   }
 
