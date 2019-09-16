@@ -11,3 +11,17 @@ CREATE TABLE orm.metadata (
 	name text
 );
 CREATE UNIQUE INDEX metadata_name ON orm.metadata(name);
+
+CREATE TABLE orm._file (
+	id idtype PRIMARY KEY DEFAULT nextval('orm.id_seq'),
+	name text,
+	path text,
+	content_type text,
+	size int8,
+	height int,
+	width int,
+	checksum bytea	
+) INHERITS (orm._traceable);
+CREATE UNIQUE INDEX file_checksum ON orm._file(checksum);
+CREATE INDEX file_path ON orm._file(path);
+
