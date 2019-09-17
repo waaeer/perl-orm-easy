@@ -13,7 +13,7 @@ $perl$
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>['m.*'], outer_select=>['m.*'], joins=>[], order=>[], types=>[]};
+  my $q = {wheres=>[], bind=>[], select=>['m.*'], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[]};
 
 
 # smart pre-triggers for all superclasses
@@ -127,14 +127,12 @@ warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
   }
 
 
-warn "q,sel=", Data::Dumper::Dumper($q, $query);
-
-
   my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', @{$q->{wheres}}) : '';
   my $order     = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
   my $sel       = join(', ', @{$q->{select}});
   my $outer_sel = join(', ', @{$q->{outer_select}});
-  my $join      = @{$q->{joins}} ? ' JOIN '. join('  ', @{$q->{joins}}) : '';
+  my $join      = @{$q->{joins}}      ?  join('  ', map { "JOIN      $_ " } @{$q->{joins}}) : '';
+  my $ljoin     = @{$q->{left_joins}} ?  join('  ', map { "LEFT JOIN $_ " } @{$q->{left_joins}}) : '';  
   my ($limit,@pagebind,@pagetypes) = ('');
   if($pagesize) { 
 	  $limit = sprintf("LIMIT \$%d OFFSET \$%d", $#{$q->{bind}}+2, $#{$q->{bind}}+3);
@@ -142,10 +140,10 @@ warn "q,sel=", Data::Dumper::Dumper($q, $query);
 	  push @pagetypes, 'int', 'int';
   }
 
-  my $sql  = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join $where $order $limit) m";
+  my $sql  = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join $ljoin $where $order $limit) m";
   my $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
 
-warn "sql=$sql\n", Data::Dumper::Dumper($q,\@pagetypes,\@pagebind);
+#warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, \@pagetypes,\@pagebind);
   my %ret;
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
   unless ($query->{without_count}) { 
