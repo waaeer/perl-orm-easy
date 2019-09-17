@@ -104,20 +104,18 @@ $$;
 
 CREATE TYPE orm.inheritance_list_item AS (id OID, schema name, tablename name, depth int, pos int);
 
-CREATE OR REPLACE FUNCTION orm.get_inheritance_tree(schema_ text, tablename_ text) RETURNS SETOF orm.inheritance_list_item LANGUAGE SQL SECURITY DEFINER AS $$
-	WITH RECURSIVE  tree AS 
-		(SELECT c.oid AS id, s.nspname, c.relname, 0 AS depth, 0 AS pos FROM pg_class c 
+CREATE OR REPLACE FUNCTION orm.get_inheritance_tree(schema_ text, tablename_ text) RETURNS SETOF orm.inheritance_list_item LANGUAGE SQL STABLE PARALLEL SAFE SECURITY DEFINER AS $$
+	WITH RECURSIVE  tree AS (
+		SELECT c.oid AS relid, s.nspname, c.relname, 0 AS depth, 0 AS pos FROM pg_class c 
         JOIN pg_namespace s ON c.relnamespace = s.oid  WHERE relname=tablename_ and nspname=schema_
-	), 
-	subtree AS 
-		(SELECT * from tree
-		 UNION ALL SELECT c.oid, s.nspname, c.relname, depth + 1 AS depth, inhseqno AS pos 
+	UNION ALL 
+		 SELECT c.oid AS relid, s.nspname, c.relname, depth + 1 AS depth, inhseqno AS pos 
 		 FROM pg_class c 
 		 JOIN pg_namespace s ON c.relnamespace = s.oid 
          JOIN pg_inherits i  ON inhparent = c.oid 
-         JOIN tree           ON i.inhrelid = tree.id 
+         JOIN tree           ON i.inhrelid = tree.relid
 	) 
-	SELECT * FROM subtree ORDER BY depth, pos;
+	SELECT * FROM tree ORDER BY depth, pos;
 $$;
 
 

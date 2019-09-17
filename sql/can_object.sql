@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION orm.can_update_object(user_id idtype, classname text, id text, data jsonb) RETURNS boolean
+CREATE OR REPLACE FUNCTION orm.can_update_object(user_id idtype, classname text, id text, data jsonb) RETURNS boolean STABLE PARALLEL SAFE
     LANGUAGE sql
     AS $$
 	-- если на данный класс привилегии нет, но есть на его суперкласс - тоже хорошо. Ищем хотя бы один суперкласс, на который привилегия есть.
@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION orm.can_update_object(user_id idtype, classname text,
 			   AND auth_interface.check_privilege(user_id, 'edit_object', ARRAY[m.id::text])
 		);
 $$;
-CREATE OR REPLACE FUNCTION orm.can_delete_object(user_id idtype, classname text, id text) RETURNS boolean
+CREATE OR REPLACE FUNCTION orm.can_delete_object(user_id idtype, classname text, id text) RETURNS boolean  STABLE PARALLEL SAFE
     LANGUAGE sql
     AS $$
     	-- если на данный класс привилегии нет, но есть на его суперкласс - тоже хорошо. Ищем хотя бы один суперкласс, на который привилегия есть.
@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION orm.can_delete_object(user_id idtype, classname text,
 		);
 $$;
 
-CREATE OR REPLACE FUNCTION orm.can_view_objects(user_id idtype, classname text) RETURNS boolean
+CREATE OR REPLACE FUNCTION orm.can_view_objects(user_id idtype, classname text) RETURNS boolean  STABLE PARALLEL SAFE
 	LANGUAGE sql
     AS $$
 
@@ -45,7 +45,7 @@ CREATE OR REPLACE FUNCTION orm.can_view_objects(user_id idtype, classname text) 
  
 $$;
 
-CREATE OR REPLACE FUNCTION orm.can_view_object(user_id idtype, classname text, id text) RETURNS boolean
+CREATE OR REPLACE FUNCTION orm.can_view_object(user_id idtype, classname text, id text) RETURNS boolean  STABLE PARALLEL SAFE
 	LANGUAGE plpgsql
     AS $$
     BEGIN
