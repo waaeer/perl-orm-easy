@@ -4,7 +4,6 @@ $perl$
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
   my $table = quote_ident($schema).'.'.quote_ident($tablename);
 
-
   # контроль доступа. В перспективе - более гранулярный
   my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
   if(!$can_see) { 
@@ -82,6 +81,14 @@ $perl$
 				push @{$q->{types}}, 'text';
 				push @{$q->{bind}},  $vv;
 			}
+			elsif(my $vv = $v->{contains}) { 
+				push @{$q->{wheres}}, sprintf(q!m.%s ~*  $%d!, quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}}, 'text';
+				push @{$q->{bind}},  $vv;
+			}
+			else { 
+				die("Cannot understand query: ".ORM::Easy::SPI::to_json($v));
+			}	
 		} else { 
 			# if type is integer, value is not-a-number and the field is referencing another table, resolve it as a referenced object name
 			if($type->[3] eq 'N' && $v && ($ v!~ /^-?\d+/) && $type->[4]) { 
