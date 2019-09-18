@@ -86,6 +86,11 @@ $perl$
 				push @{$q->{types}}, 'text';
 				push @{$q->{bind}},  $vv;
 			}
+			elsif(my $vv = $v->{any}) {
+				push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
+				push @{$q->{bind}},  $vv;
+			}
 			else { 
 				die("Cannot understand query: ".ORM::Easy::SPI::to_json($v));
 			}	
