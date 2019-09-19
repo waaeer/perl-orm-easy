@@ -22,7 +22,7 @@ $perl$
   foreach my $o ( @{ $superclasses->{rows} }) { 
 	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "query_$o->{tablename}"] )->{rows};
-		warn "try query $o->{schema} $o->{tablename}\n";
+#		warn "try query $o->{schema} $o->{tablename}\n";
 	if(@$func) { 
 		warn "call $o->{schema}.query_$o->{tablename} $q $query\n";
 		$q = ORM::Easy::SPI::spi_run_query_expr( 
