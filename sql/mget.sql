@@ -13,27 +13,8 @@ $perl$
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>['m.*'], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[]};
+  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[]};
 
-
-# smart pre-triggers for all superclasses
-  my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
-  
-  foreach my $o ( @{ $superclasses->{rows} }) { 
-	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
-			[ 'name', 'name'], [ $o->{schema}, "query_$o->{tablename}"] )->{rows};
-#		warn "try query $o->{schema} $o->{tablename}\n";
-	if(@$func) { 
-		warn "call $o->{schema}.query_$o->{tablename} $q $query\n";
-		$q = ORM::Easy::SPI::spi_run_query_expr( 
-					quote_ident($o->{schema}).'.'.quote_ident("query_$o->{tablename}").'($1, $2, $3)',
-					[ 'idtype', 'jsonb', 'jsonb'],
-					[ $user_id, $q, $query ] 
-		);
-		warn "done $o->{schema}.query_$o->{tablename} c=\n";
-
-	}
-  }
 # простые поля
 #  ...
   my @order_fields;
@@ -46,6 +27,7 @@ $perl$
 		push @order_fields, [$ordf,$dir];
 	}
   }
+
 
 #warn "DuDa=", Data::Dumper::Dumper(\@order_fields, [(keys %$query), map { $_->[0] } @order_fields]);
   my $field_types = ORM::Easy::SPI::spi_run_query(q!
@@ -63,10 +45,52 @@ $perl$
 		LEFT JOIN pg_class     sc ON s.confrelid = sc.oid
 		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) 
 		  AND a.attnum>0
-		  AND a.attname::text = ANY($3)
-	!, ['text', 'text', 'text[]'], [$schema, $tablename, [(keys %$query), map { $_->[0] } @order_fields] ]);
+		  AND ($4 OR a.attname::text = ANY($3) )
+	!, [ 'text', 'text', 'text[]', 'bool'], 
+	   [ $schema, $tablename, 
+			[(keys %$query), (map { $_->[0] } @order_fields), ($query->{_fields} ? @{$query->{_fields}} : ()) ],
+			($query->{_exclude_fields} ? "true" : "false") 
+		]);
 
   my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
+
+  my %exclude_fields = $query->{_exclude_fields} ? map { $_=>1} @{$query->{_exclude_fields}} : ();
+  if(my $flds = $query->{_fields}) { 
+	$q->{select} = [map  { 'm.'.quote_ident($_) }  @$flds];	
+  } elsif(%exclude_fields) { 
+	$q->{select} = [
+		map  { 'm.'.quote_ident($_->{attname}) }  
+		grep { !$exclude_fields{$_->{attname}} } 
+		@{ $field_types->{rows} } 
+	];
+  } else { 
+	$q->{select} = ['m.*'];
+  }
+
+  
+
+# smart pre-triggers for all superclasses
+  my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
+  
+  foreach my $o ( @{ $superclasses->{rows} }) { 
+	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
+			[ 'name', 'name'], [ $o->{schema}, "query_$o->{tablename}"] )->{rows};
+#		warn "try query $o->{schema} $o->{tablename}\n";
+	if(@$func) { 
+#		warn "call $o->{schema}.query_$o->{tablename} $q $query\n";
+		$q = ORM::Easy::SPI::spi_run_query_expr( 
+					quote_ident($o->{schema}).'.'.quote_ident("query_$o->{tablename}").'($1, $2, $3)',
+					[ 'idtype', 'jsonb', 'jsonb'],
+					[ $user_id, $q, $query ] 
+		);
+#		warn "done $o->{schema}.query_$o->{tablename} c=\n";
+
+	}
+  }
+
+
+
+
 
   foreach my $f (keys %$query) { 
 	if(my $type = $field_types_by_attr{$f}) {
@@ -111,7 +135,7 @@ $perl$
 	}
   }
   # order
-warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
+#warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
   foreach my $ord (@order_fields) { 
 	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
 		push @{$q->{order} ||= []},  quote_ident($ord->[0]).$ord->[1];
