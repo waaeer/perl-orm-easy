@@ -144,8 +144,10 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 			[ 'name', 'name'], [ $schema, "can_${op}_$tablename"])) {
 		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
 		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
+	} else { 
+		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, quote_ident($schema).'.'.quote_ident($tablename), $id, $data])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
 	}
-
 
     my $sql;
     if($op eq 'update') {

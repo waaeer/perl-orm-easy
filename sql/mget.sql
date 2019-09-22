@@ -96,8 +96,13 @@ $perl$
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
 		if(ref($v) eq 'ARRAY') { 
-			push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
-			push @{$q->{types}},  $type->[0].'.'.$type->[1].'[]';
+			if($type->[3] eq 'A') { # for array data types
+				push @{$q->{wheres}}, sprintf('m.%s && $%d', quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}},  $type->[0].'.'.$type->[1];
+			} else {
+				push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
+				push @{$q->{types}},  $type->[0].'.'.$type->[1].'[]';
+			}
 			push @{$q->{bind}},  $v;
 		} elsif (ref($v) eq 'HASH') { 
 			if(my $vv = $v->{begins}) { 

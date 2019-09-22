@@ -13,10 +13,12 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
 #	warn "try $schema.can_delete_$tablename\n";
     if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
 			[ 'name', 'name'], [ $schema, "can_delete_$tablename"])) {
-		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_delete_$tablename").'($1,$2,$3)', ['idtype', 'text'], [$user_id, $id])
+		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_delete_$tablename").'($1,$2)', ['idtype', 'text'], [$user_id, $id])
 		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete'}));
-    }
-
+    } else { 
+		ORM::Easy::SPI::spi_run_query_bool('select orm.can_delete_object($1,$2,$3)', ['idtype', 'text','text'], [$user_id, quote_ident($schema).'.'.quote_ident($tablename), $id])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete'}));
+	}
 
 # smart pre-triggers for all superclasses
 	my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
@@ -33,7 +35,7 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
 
 #			warn "call $o->{schema}.predelete_$o->{tablename}\n";
 			my $changes = ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("predelete_$o->{tablename}").'($1, $2, $3) AS x',
-				[ 'idtype', 'idtype', 'json' ],
+				[ 'idtype', 'idtype', 'jsonb' ],
 				[ $user_id, $id, $old_data] 
 			)->{rows}->[0]->{x};
 #			warn "done $o->{schema}.predelete_$o->{tablename}\n";
