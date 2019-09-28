@@ -96,14 +96,27 @@ $perl$
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
 		if(ref($v) eq 'ARRAY') { 
-			if($type->[3] eq 'A') { # for array data types
+			if($type->[3] eq 'D') {  # for date data types
+					if($v->[0]) { 
+						push @{$q->{wheres}}, sprintf('m.%s >= $%d', quote_ident($f), $#{$q->{bind}}+2 );
+						push @{$q->{types}},  $type->[0].'.'.$type->[1];
+						push @{$q->{bind}},  $v->[0];
+					}
+					if($v->[1]) { 
+						push @{$q->{wheres}}, sprintf('m.%s <  $%d', quote_ident($f), $#{$q->{bind}}+2 );
+						push @{$q->{types}},  $type->[0].'.'.$type->[1];
+						push @{$q->{bind}},  $v->[1];
+					}
+			} elsif($type->[3] eq 'A') { # for array data types
 				push @{$q->{wheres}}, sprintf('m.%s && $%d', quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}},  $type->[0].'.'.$type->[1];
+				push @{$q->{bind}},  $v;
 			} else {
 				push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}},  $type->[0].'.'.$type->[1].'[]';
+				push @{$q->{bind}},  $v;
 			}
-			push @{$q->{bind}},  $v;
+
 		} elsif (ref($v) eq 'HASH') { 
 			if(my $vv = $v->{begins}) { 
 				push @{$q->{wheres}}, sprintf(q!m.%s ~* ('^' || $%d)!, quote_ident($f), $#{$q->{bind}}+2 );
