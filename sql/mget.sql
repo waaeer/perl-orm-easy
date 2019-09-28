@@ -88,10 +88,6 @@ $perl$
 	}
   }
 
-
-
-
-
   foreach my $f (keys %$query) { 
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
@@ -158,7 +154,7 @@ $perl$
 	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
 		push @{$q->{order} ||= []},  quote_ident($ord->[0]).$ord->[1];
 	} else { 
-		warn Data::Dumper::Dumper(\%field_types_by_attr);
+#		warn Data::Dumper::Dumper(\%field_types_by_attr);
 		die("Unknown order expression '$ord->[0]'");
 	}
   }

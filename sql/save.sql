@@ -1,6 +1,7 @@
 CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id text, user_id idtype, data jsonb, context jsonb)  
  		RETURNS json_pair LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb  AS $perl$
     my ($schema, $tablename, $id, $user_id, $jsondata, $context) = @_;
+	my $debug = 0;
 # todo: засунуть user_id в сессионный контекст, чтобы подхватить его из триггеров - и то же в orm_interface.remove для триггера delete_history 
 #	warn "Called save($schema, $tablename, $id, $user_id, $jsondata, $context)\n";
 
@@ -58,7 +59,7 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 		}
 	}
 # form and run SQL
-  warn "CRM save ", Data::Dumper::Dumper($data);
+  warn "CRM save ", Data::Dumper::Dumper($data) if $debug;
 
 	if($op ne 'update') { 
 		$data->{id} = $id;
@@ -159,7 +160,7 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 			join(',', map { $exprs{$_} } @fields). ') returning *';
     } 
 
-warn "SQL=$sql\n";
+	warn "SQL=$sql\n" if $debug;
     my $obj = ORM::Easy::SPI::spi_run_query_row($sql, \@types, \@args);
     foreach my $k (keys %$obj) { if (ref($obj->{$k}) eq 'PostgreSQL::InServer::ARRAY') {  $obj->{$k} = $obj->{$k}->{array}; } }
 
