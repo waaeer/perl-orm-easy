@@ -164,6 +164,26 @@ sub list2tree {
   return \@top;
 }
 
+sub list2plaintree { 
+  my ($list, $convert) = @_;
+  my $tree = list2tree($list,$convert);
+  my @plain;
+  my $sub;
+  $sub = sub {
+	my $nodes = shift;
+	my $level = shift;
+	foreach my $node (@$nodes) { 
+		$node->{level} = $level;
+		my $subnodes = delete $node->{children};
+		push @plain, $node;
+		if($subnodes) { 
+			$sub->($subnodes, $level+1);
+		}		
+	}
+  };
+  $sub->($tree, 0);
+  return \@plain;
+}
 
 
 
