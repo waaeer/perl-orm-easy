@@ -101,21 +101,44 @@ CREATE OR REPLACE FUNCTION orm.make_triggers(schema text, tbl text) RETURNS void
 	END;
 $$;
 
-
-CREATE TYPE orm.inheritance_list_item AS (id OID, schema name, tablename name, depth int, pos int);
+DROP TYPE IF EXISTS orm.inheritance_list_item CASCADE;
+CREATE TYPE orm.inheritance_list_item AS (id OID, schema name, tablename name, parent OID, path OID[], depth int, pos int);
 
 CREATE OR REPLACE FUNCTION orm.get_inheritance_tree(schema_ text, tablename_ text) RETURNS SETOF orm.inheritance_list_item LANGUAGE SQL STABLE PARALLEL SAFE SECURITY DEFINER AS $$
 	WITH RECURSIVE  tree AS (
-		SELECT c.oid AS relid, s.nspname, c.relname, 0 AS depth, 0 AS pos FROM pg_class c 
+		SELECT c.oid AS relid, s.nspname, c.relname, ARRAY[c.oid] AS path, 0 AS depth, 0 AS pos FROM pg_class c 
         JOIN pg_namespace s ON c.relnamespace = s.oid  WHERE relname=tablename_ and nspname=schema_
 	UNION ALL 
-		 SELECT c.oid AS relid, s.nspname, c.relname, depth + 1 AS depth, inhseqno AS pos 
+		 SELECT c.oid AS relid, s.nspname, c.relname, array_cat(ARRAY[c.oid],tree.path), depth + 1 AS depth, inhseqno AS pos 
 		 FROM pg_class c 
 		 JOIN pg_namespace s ON c.relnamespace = s.oid 
          JOIN pg_inherits i  ON inhparent = c.oid 
          JOIN tree           ON i.inhrelid = tree.relid
 	) 
+	SELECT relid AS id, nspname AS schema, relname AS tablename,path[array_length(path,1)-2] AS parent, path, depth, pos FROM tree ORDER BY depth, pos;
+$$;
+
+CREATE OR REPLACE FUNCTION orm.get_subclasses(schema_ text, tablename_ text) RETURNS SETOF orm.inheritance_list_item LANGUAGE SQL STABLE PARALLEL SAFE SECURITY DEFINER AS $$
+	WITH RECURSIVE  tree AS (
+		SELECT c.oid AS relid, s.nspname, c.relname, NULL::oid AS parent, ARRAY[c.oid] AS path, 0 AS depth, 0 AS pos FROM pg_class c 
+        JOIN pg_namespace s ON c.relnamespace = s.oid  WHERE relname=tablename_ and nspname=schema_
+	UNION ALL 
+		 SELECT c.oid AS relid, s.nspname, c.relname, tree.relid, array_cat(tree.path, ARRAY[c.oid]) AS path, depth + 1 AS depth, inhseqno AS pos
+		 FROM pg_class c 
+		 JOIN pg_namespace s ON c.relnamespace = s.oid 
+         JOIN pg_inherits i  ON inhrelid = c.oid 
+         JOIN tree           ON i.inhparent = tree.relid
+	) 
 	SELECT * FROM tree ORDER BY depth, pos;
 $$;
+
+CREATE OR REPLACE FUNCTION orm.get_terminal_subclasses(schema_ text, tablename_ text) RETURNS SETOF orm.inheritance_list_item LANGUAGE SQL STABLE PARALLEL SAFE SECURITY DEFINER AS $$
+	WITH tree AS (SELECT * FROM orm.get_subclasses(schema_, tablename_))
+	SELECT * FROM tree t
+		WHERE NOT EXISTS (SELECT * FROM tree t1 WHERE t1.parent = t.id);
+
+
+$$;
+
 
 

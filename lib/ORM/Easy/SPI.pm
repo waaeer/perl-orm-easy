@@ -137,18 +137,19 @@ sub filter_bool {
 }
 
 sub list2tree { 
-  my ($list, $convert) = @_;
+  my ($list, $convert, %opt) = @_;
   my $level = 0;
   my %nodeById;
   my @top;
+  my $pos = 0;
   my %nodeById = 
-		map { my $node =  $convert ? $convert->($_) : $_ ; $node->{id} = $_->{id}; $_->{id} => $node } 
+		map { my $node =  $convert ? $convert->($_) : $_ ; $node->{__pos} = $pos++; $node->{id} = $_->{id}; $_->{id} => $node } 
 		@$list;
   foreach my $node (
-	sort { $a->{pos} <=> $b->{pos} } 
+	sort { $a->{__pos} <=> $b->{__pos} } 
 	values %nodeById
   ) { 
-		if($node->{parent}) { 	
+		if($node->{parent} && $node->{parent} ne $opt{root}) { 	
 			if(my $parent_item = $nodeById{ $node->{parent} }) { 
 				push @{ $parent_item->{children} ||= []}, $node;
 				$node->{level} = $parent_item->{level}+1;
@@ -165,8 +166,8 @@ sub list2tree {
 }
 
 sub list2plaintree { 
-  my ($list, $convert) = @_;
-  my $tree = list2tree($list,$convert);
+  my ($list, $convert,%opt) = @_;
+  my $tree = list2tree($list,$convert, %opt);
   my @plain;
   my $sub;
   $sub = sub {
@@ -174,7 +175,7 @@ sub list2plaintree {
 	my $level = shift;
 	foreach my $node (@$nodes) { 
 		$node->{level} = $level;
-		my $subnodes = delete $node->{children};
+		my $subnodes = $node->{children};
 		push @plain, $node;
 		if($subnodes) { 
 			$sub->($subnodes, $level+1);

@@ -166,7 +166,51 @@ $perl$
 		 orm.can_delete_object($%d, $%d, m.id::text) as can_delete
 	!, $bb, $bb+1, $bb, $bb+1 );
 	push @{$q->{types}}, 'idtype', 'text';
-    push @{$q->{bind}},  $user_id, "$schema.$tablename";
+    push @{$q->{bind}},  $user_id, ($query->{__subclasses} ? '__class' : "$schema.$tablename");
+  }
+
+  if($query->{__subclasses}) { 
+
+	# посмотрим, какие поля есть у подклассов данного класса
+	my $subclasses = ORM::Easy::SPI::spi_run_query(q! SELECT 
+			schema || '.' || tablename AS classname,
+			quote_ident(schema) || '.' || quote_ident(tablename) AS tablename,
+			(SELECT json_agg(row_to_json(x))::jsonb FROM (
+				SELECT attname, n.nspname, typname 
+					FROM pg_attribute a 
+					JOIN pg_type t ON a.atttypid = t.oid 
+					JOIN pg_namespace n ON n.oid = t.typnamespace
+					WHERE attrelid = c.id AND attnum > 0
+			) x) AS  fields
+		FROM orm.get_terminal_subclasses($1, $2) c 
+	!, ['text', 'text'], [$schema, $tablename])->{rows};
+	my (%fields, %namespaces, %transforms);
+	foreach my $c (@$subclasses) {   ## соберем объединение всех полей, и заодно проверим совпадение типов одинаковых полей
+		foreach my $fld (@{$c->{fields}}) { 
+			my $attname = $fld->{attname};
+			my $existing_type = $fields{$attname};
+			my $type = $fld->{typname};
+			my $nsp  = $fld->{nspname};
+			if($existing_type && ($type ne $existing_type || $nsp ne $namespaces{$attname})) {
+				$transforms{$attname} = $existing_type;
+			}
+			if(!$existing_type) { $fields{$attname} = $type; $namespaces{$attname} = $nsp; }
+			($c->{by_field} ||= {})->{$attname} = 1;
+		}
+	}
+	my @fields = sort keys %fields;
+	foreach my $c (@$subclasses) {   ## составим строчки выбираемых полей для всех подклассов
+		$c->{all_fields} = join(', ',  map { 
+			$c->{by_field}->{$_} # если данное поле есть в таблице данного подкласса
+			? $_ . ( $transforms{$_} ? '::'.$transforms{$_} : '')
+			: 'NULL::'.quote_ident($namespaces{$_}).'.'.quote_ident($fields{$_});
+		} @fields);
+	}
+#warn "subclasses=".Data::Dumper::Dumper($subclasses);
+	if(!@$subclasses) { 
+		die("Class $table has no subclasses");
+	}
+	$table = '('. join(' UNION ALL ', map { "SELECT $_->{all_fields},".quote_literal($_->{classname})." AS __class FROM $_->{tablename}" } @$subclasses ). ') ';
   }
 
 
@@ -183,12 +227,29 @@ $perl$
 	  push @pagetypes, 'int', 'int';
   }
 
-  my $sql  = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join $ljoin $where $order $limit) m";
-  my $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
+  my ($sql,$nsql,@treebind);
+  if(my $p = $query->{__root}) { 
+	my $top_where = ($where ? "$where AND " : "WHERE "). sprintf("(m.parent = \$%d)", $#{$q->{bind}} + $#pagebind + 3);
+	push @pagebind, $p;
+	push @pagetypes,'idtype';
+	my $child_where  = ($where ? "$where AND " : "WHERE "). 'm.parent = __tree.id';
+	$sql = "WITH RECURSIVE __tree AS (
+	                                SELECT $sel FROM $table m $join $ljoin $top_where
+					UNION ALL
+	                                SELECT $sel FROM $table m $join, __tree $child_where 
+			)
+			SELECT $outer_sel FROM (SELECT $sel FROM __tree m $order $limit) m
+			";
+  } else { 
+	$sql = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join $ljoin $where $order $limit) m";
+  }  
+  $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
 
-#warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, \@pagetypes,\@pagebind);
+#warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind);
   my %ret;
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
+
+#warn "ret list is ", Data::Dumper::Dumper($ret{list});
   unless ($query->{without_count}) { 
 	$ret{n} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
