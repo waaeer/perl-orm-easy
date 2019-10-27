@@ -234,18 +234,18 @@ $perl$
 	push @pagetypes,'idtype';
 	my $child_where  = ($where ? "$where AND " : "WHERE "). 'm.parent = __tree.id';
 	$sql = "WITH RECURSIVE __tree AS (
-	                                SELECT $sel FROM $table m $join $ljoin $top_where
+	                                SELECT $sel FROM $table m $join  $top_where
 					UNION ALL
 	                                SELECT $sel FROM $table m $join, __tree $child_where 
 			)
-			SELECT $outer_sel FROM (SELECT $sel FROM __tree m $order $limit) m
+			SELECT $outer_sel FROM (SELECT $sel FROM __tree m $order $limit) m $ljoin
 			";
   } else { 
-	$sql = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join $ljoin $where $order $limit) m";
+	$sql = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where $order $limit) m $ljoin ";
   }  
   $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
 
-#warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind);
+warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind);
   my %ret;
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
 
