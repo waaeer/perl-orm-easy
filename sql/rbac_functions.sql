@@ -157,3 +157,28 @@ CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id idtype, grantee
 $$;
 
 
+CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id idtype, grantee_id idtype, _add jsonb, _del idtype[])  RETURNS json SECURITY DEFINER LANGUAGE PLPGSQL AS $$
+	DECLARE i idtype; 
+	DECLARE __add jsonb[];
+	DECLARE __objects idtype[];
+	BEGIN
+		-- сейчас мы не заморачиваемся с этим, и считаем, что одна привилегия "админа" дает право добавлять все роли.
+		SELECT array_agg(x) INTO __add FROM jsonb_array_elements(_add) x;
+
+		IF auth_interface.check_privilege(user_id, 'manage_internal_users')  THEN
+			FOR i IN 1 .. COALESCE(array_length(__add,1),0) LOOP
+				SELECT array_agg(x::idtype) INTO __objects FROM jsonb_array_elements_text(__add[i]->'objects') x;
+				INSERT INTO auth.user_roles ("user",role, created_by, objects) VALUES (grantee_id, (__add[i]->>'role')::idtype, user_id, __objects) ON CONFLICT DO NOTHING;
+			END LOOP;
+			FOR i IN 1 .. COALESCE(array_length(_del,1),0) LOOP
+				DELETE FROM auth.user_roles WHERE "user" = grantee_id AND id = _del[i]; -- todo: who?
+			END LOOP;
+			RETURN json_build_object('ok',1);
+		ELSE 
+			raise notice 'not privileged (%) for manage internal users' , user_id;
+			RETURN json_build_object('error', 'Not allowed');
+		END IF;
+	END;	
+
+$$;
+

@@ -7,7 +7,10 @@ use Time::HiRes;
 use Hash::Merge;
 use Clone;
 use List::Util;
+use Carp;
 use locale;
+
+
 require "utf8_heavy.pl";
 my $log_mode = 0;
 
@@ -67,7 +70,7 @@ sub make_new_id {
 sub spi_run_query {  # toDo: cache
 	my ($sql, $types, $values) = @_;
 	if($log_mode) { warn "spi_run_query($sql,$types,$values)\n", Data::Dumper::Dumper($types,$values); } 
-
+	$SIG{__DIE__} = \&Carp::confess;  
 	my $h   = ::spi_prepare($sql, @$types);
 	my $ret = ::spi_exec_prepared($h, {},  @$values);
 	## todo: check and log errors

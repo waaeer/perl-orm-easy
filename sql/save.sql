@@ -10,8 +10,23 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 	my $id_in_data = delete $jsondata->{id}; # так можно явно задать id для нового объекта
 	my %ids;
 	$id = ORM::Easy::SPI::make_new_id($id ||  $id_in_data, $context, \%ids);
-
     my $data = $jsondata; 
+
+## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
+## проверка прав делается перед presave, т.к. в presave уже могут быть сделаны изменения в БД, влияющие на права доступа
+
+warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
+#   toDo: scan superclasses  
+
+    if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
+			[ 'name', 'name'], [ $schema, "can_${op}_$tablename"])) {
+		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
+	} else { 
+		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, quote_ident($schema).'.'.quote_ident($tablename), $id, $data])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
+	}
+
     my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname, 
 			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = t.typnamespace)::text,  
@@ -45,13 +60,12 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 				: {}
 			;
 
-#			warn "call $o->{schema}.presave_$o->{tablename}\n";
+			warn "call $o->{schema}.presave_$o->{tablename}\n";
 			my $changes = ORM::Easy::SPI::spi_run_query_expr(quote_ident($o->{schema}).'.'.quote_ident("presave_$o->{tablename}").'($1, $2, $3, $4, $5, $6, $7)',
 				[ 'idtype', 'idtype', 'text', 'jsonb','jsonb' , 'text', 'text', ],
 				[ $user_id, $id, $op, $old_data, $jsondata, $schema, $tablename ] 
 			);
 #			warn "done $o->{schema}.presave_$o->{tablename}\n";
-#warn "changes are ".Data::Dumper::Dumper($changes);
 			if($changes) { 
 				my $add_data = $changes; 
 				$data = Hash::Merge->new('RIGHT_PRECEDENT')->merge($data, $add_data);
@@ -59,19 +73,29 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 		}
 	}
 # form and run SQL
-  warn "CRM save ", Data::Dumper::Dumper($data) if $debug;
+  warn "ORM save ", Data::Dumper::Dumper($data) if $debug;
 
 	if($op ne 'update') { 
 		$data->{id} = $id;
 #		warn "id=$id\n";
 	}
     my @fields = sort keys %$data;
-	my (%exprs, @types, @args);
+	my (%exprs, @types, @args, @fields_ok);
 	my $n = 0;
 
 	foreach my $f (@fields) { 
-		my $t = $field_types_by_attr{$f} || die("No such field $f; fields are ".join(',', sort keys %field_types_by_attr));
 		my $val = $data->{$f};
+		my $t   = $field_types_by_attr{$f};
+#warn "Process $f $val\n";
+		if(!$t) {
+			if(!defined($val)) { 
+				# в несуществующее поле разрешаем писать только NULL. Это нужно, чтобы в presave обрабатывать дополнительные "виртуальные" поля и птом их занулять
+				delete $data->{$f};
+				next;
+			}
+			die("No such field $f; fields are ".join(',', sort keys %field_types_by_attr));
+		}
+		push @fields_ok, $f;
 		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
 		$n++;
 		$exprs{$f} = "\$$n";
@@ -135,33 +159,20 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 		}
 	}
 
-    ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
-
-
-#	warn "try $schema.can_${op}_$tablename\n";   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
-#   toDo: scan superclasses  
-
-    if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
-			[ 'name', 'name'], [ $schema, "can_${op}_$tablename"])) {
-		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
-	} else { 
-		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, quote_ident($schema).'.'.quote_ident($tablename), $id, $data])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op}));
-	}
-
+    
     my $sql;
     if($op eq 'update') {
         $sql = 'update '.quote_ident($schema).'.'.quote_ident($tablename).' set '.join(', ', map { 
             quote_ident($_)."=$exprs{$_}"
-		} @fields).' where id = '.quote_literal($id).'::idtype returning *';
+		} @fields_ok).' where id = '.quote_literal($id).'::idtype returning *';
     } else {  #insert
-        $sql = 'insert into '.quote_ident($schema).'.'.quote_ident($tablename).' ('.join(', ', map { quote_ident($_) } @fields).') values ('.
-			join(',', map { $exprs{$_} } @fields). ') returning *';
+        $sql = 'insert into '.quote_ident($schema).'.'.quote_ident($tablename).' ('.join(', ', map { quote_ident($_) } @fields_ok).') values ('.
+			join(',', map { $exprs{$_} } @fields_ok). ') returning *';
     } 
 
 	warn "SQL=$sql\n" if $debug;
     my $obj = ORM::Easy::SPI::spi_run_query_row($sql, \@types, \@args);
+	warn "save done main SQL\n" if $debug;
     foreach my $k (keys %$obj) { if (ref($obj->{$k}) eq 'PostgreSQL::InServer::ARRAY') {  $obj->{$k} = $obj->{$k}->{array}; } }
 
 ## RUN postsaves
@@ -170,17 +181,18 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 	foreach my $o ( @{ $superclasses->{rows} }) { 
 		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "postsave_$o->{tablename}"] )->{rows};
-#		warn "try post $o->{schema} $o->{tablename}\n";
+		warn "try post $o->{schema} $o->{tablename}\n" if $debug;
 		if(@$func) { 
-#			warn "call $o->{schema}.postsave_$o->{tablename}\n";
+			warn "call $o->{schema}.postsave_$o->{tablename}\n" if $debug;
 			ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("postsave_$o->{tablename}").'($1, $2, $3, $4, $5, $6, $7)',
 				[ 'idtype', 'idtype', 'text', 'jsonb','jsonb', 'text', 'text' ],
 				[ $user_id, $id, $op, $old_data, $jsondata, $schema, $tablename ] 
 			);
-#			warn "done $o->{schema}.postsave_$o->{tablename}\n";
+			warn "done $o->{schema}.postsave_$o->{tablename}\n" if $debug;
 		}
 	}
 
+	warn "Exiting save\n" if $debug;
 
 
     return {a=> $obj, b=>{_ids=>\%ids}};

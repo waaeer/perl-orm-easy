@@ -23,4 +23,7 @@ sql/rbac_functions.sql
 sql/rbac_tables.sql
 sql/save.sql
 sql/schema.sql
+sql/store_file.sql
 sql/tables.sql
+sql/treeget.sql
+

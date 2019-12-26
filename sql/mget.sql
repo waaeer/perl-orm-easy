@@ -2,18 +2,21 @@ CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_
 	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS 
 $perl$
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
+
+  my $debug = 1;
   my $table = quote_ident($schema).'.'.quote_ident($tablename);
+
 
   # контроль доступа. В перспективе - более гранулярный
   my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
   if(!$can_see) { 
-		die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename",  action=>'view'}));
+		die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename",  action=>'view', reason=>0}));
   }
   $page ||= 1;
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[]};
+  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[], with=>[]};
 
 # простые поля
 #  ...
@@ -220,6 +223,7 @@ $perl$
   my $outer_sel = join(', ', @{$q->{outer_select}});
   my $join      = @{$q->{joins}}      ?  join('  ', map { "JOIN      $_ " } @{$q->{joins}}) : '';
   my $ljoin     = @{$q->{left_joins}} ?  join('  ', map { "LEFT JOIN $_ " } @{$q->{left_joins}}) : '';  
+  my $with      = @{$q->{with}}       ?  join(', ', @{$q->{with}}) : '';
   my ($limit,@pagebind,@pagetypes) = ('');
   if($pagesize) { 
 	  $limit = sprintf("LIMIT \$%d OFFSET \$%d", $#{$q->{bind}}+2, $#{$q->{bind}}+3);
@@ -228,12 +232,14 @@ $perl$
   }
 
   my ($sql,$nsql,@treebind);
+  my $uwith = $with ? "WITH $with " : "";
   if(my $p = $query->{__root}) { 
 	my $top_where = ($where ? "$where AND " : "WHERE "). sprintf("(m.parent = \$%d)", $#{$q->{bind}} + $#pagebind + 3);
 	push @pagebind, $p;
 	push @pagetypes,'idtype';
 	my $child_where  = ($where ? "$where AND " : "WHERE "). 'm.parent = __tree.id';
-	$sql = "WITH RECURSIVE __tree AS (
+	my $rwith = $with  ? " $with," : '';
+	$sql = "WITH $rwith RECURSIVE __tree AS (
 	                                SELECT $sel FROM $table m $join  $top_where
 					UNION ALL
 	                                SELECT $sel FROM $table m $join, __tree $child_where 
@@ -241,11 +247,11 @@ $perl$
 			SELECT $outer_sel FROM (SELECT $sel FROM __tree m $order $limit) m $ljoin
 			";
   } else { 
-	$sql = "SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where $order $limit) m $ljoin ";
+	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where $order $limit) m $ljoin ";
   }  
-  $nsql = "SELECT COUNT(*) AS value FROM $table m $join $where";
+  $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
-warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind);
+warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind) if $debug;
   my %ret;
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
 
@@ -253,6 +259,30 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
   unless ($query->{without_count}) { 
 	$ret{n} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
+
+########## Smart postprocess-triggers for all superclasses (including this class)
+
+  foreach my $o ( @{ $superclasses->{rows} }) { 
+	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
+			[ 'name', 'name'], [ $o->{schema}, "postquery_$o->{tablename}"] )->{rows};
+#		warn "try postquery $o->{schema} $o->{tablename}\n";
+	if(@$func) { 
+#		warn "call $o->{schema}.postquery_$o->{tablename} $q $query\n";
+		my $new_list = ORM::Easy::SPI::spi_run_query_expr( 
+					quote_ident($o->{schema}).'.'.quote_ident("postquery_$o->{tablename}").'($1, $2, $3)',
+					[ 'idtype', 'jsonb', 'jsonb'],
+					[ $user_id, $ret{list}, $query ] 
+		);
+		if($new_list) {
+			$ret{list} = $new_list;
+		}
+#		warn "done $o->{schema}.postquery_$o->{tablename} c=\n";
+
+	}
+  }
+
+
+
   return \%ret;
 $perl$;
 
