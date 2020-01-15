@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_
 $perl$
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
 
-  my $debug = 1;
+  my $debug = 0;
   my $table = quote_ident($schema).'.'.quote_ident($tablename);
 
 
