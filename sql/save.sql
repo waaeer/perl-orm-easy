@@ -60,7 +60,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 				: {}
 			;
 
-			warn "call $o->{schema}.presave_$o->{tablename}\n";
+			warn "call $o->{schema}.presave_$o->{tablename}\n" if $debug;
 			my $changes = ORM::Easy::SPI::spi_run_query_expr(quote_ident($o->{schema}).'.'.quote_ident("presave_$o->{tablename}").'($1, $2, $3, $4, $5, $6, $7)',
 				[ 'idtype', 'idtype', 'text', 'jsonb','jsonb' , 'text', 'text', ],
 				[ $user_id, $id, $op, $old_data, $jsondata, $schema, $tablename ] 
