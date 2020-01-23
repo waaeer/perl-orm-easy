@@ -244,10 +244,10 @@ $perl$
 					UNION ALL
 	                                SELECT $sel FROM $table m $join, __tree $child_where 
 			)
-			SELECT $outer_sel FROM (SELECT $sel FROM __tree m $order $limit) m $ljoin
+			SELECT $outer_sel FROM (SELECT $sel FROM __tree m ".($limit ? "$order $limit" : ""). ") m $ljoin $order 
 			";
   } else { 
-	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where $order $limit) m $ljoin ";
+	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where ".($limit ? "$order $limit" : ""). ") m $ljoin $order";
   }  
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
