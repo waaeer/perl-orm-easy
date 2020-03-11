@@ -70,14 +70,21 @@ sub make_new_id {
 sub spi_run_query {  # toDo: cache
 	my ($sql, $types, $values) = @_;
 	if($log_mode) { warn "spi_run_query($sql,$types,$values)\n", Data::Dumper::Dumper($types,$values); } 
-	$SIG{__DIE__} = \&Carp::confess;  
-	my $h   = ::spi_prepare($sql, @$types);
-	my $ret = ::spi_exec_prepared($h, {},  @$values);
+#	local $SIG{__DIE__} = \&Carp::confess;  
+	my ($ret, $h);
+	eval { 
+		$h   = ::spi_prepare($sql, @$types);
+		$ret = ::spi_exec_prepared($h, {},  @$values);
+	};
+	if($@) { 
+		::spi_freeplan($h) if $h;
+		confess "$@ in spi_run_query($sql, $types, $values)\n", Data::Dumper::Dumper($types,$values);		
+	}
 	## todo: check and log errors
 	if($ret) { 
 		unbless_arrays_in_rows( $ret->{rows} );
 	}
-	::spi_freeplan($h);
+	::spi_freeplan($h) if $h;
 	return $ret;
 }
 
