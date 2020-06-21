@@ -69,6 +69,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 			if($changes) { 
 				my $add_data = $changes; 
 				$data = Hash::Merge->new('RIGHT_PRECEDENT')->merge($data, $add_data);
+warn "Data=".Data::Dumper::Dumper($changes, $data);
 			}
 		}
 	}

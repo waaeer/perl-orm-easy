@@ -1,5 +1,3 @@
-CREATE EXTENSION plperl;
-CREATE EXTENSION jsonb_plperl;
 
 CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb 
 		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS $$

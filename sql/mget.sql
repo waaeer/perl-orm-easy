@@ -6,6 +6,8 @@ $perl$
   my $debug = 0;
   my $table = quote_ident($schema).'.'.quote_ident($tablename);
 
+warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
+
 
   # контроль доступа. В перспективе - более гранулярный
   my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
@@ -31,9 +33,9 @@ $perl$
 	}
   }
 
-
-#warn "DuDa=", Data::Dumper::Dumper(\@order_fields, [(keys %$query), map { $_->[0] } @order_fields]);
-  my $field_types = ORM::Easy::SPI::spi_run_query(q!
+  my $get_field_types = sub {
+	my ($take_all, $fields) = @_;
+	my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname, 
 			(SELECT ARRAY[
 					(select nspname from pg_namespace n where n.oid = tp.typnamespace)::text,  
@@ -50,12 +52,18 @@ $perl$
 		  AND a.attnum>0
 		  AND ($4 OR a.attname::text = ANY($3) )
 	!, [ 'text', 'text', 'text[]', 'bool'], 
-	   [ $schema, $tablename, 
-			[(keys %$query), (map { $_->[0] } @order_fields), ($query->{_fields} ? @{$query->{_fields}} : ()) ],
-			($query->{_exclude_fields} ? "true" : "false") 
-		]);
+	   [ $schema, $tablename, $fields, $take_all]
+	);
+	return $field_types->{rows};
+  };
 
-  my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
+  my $field_types = $get_field_types->( 
+		($query->{_exclude_fields} ? "true" : "false"),
+		[(keys %$query), (map { $_->[0] } @order_fields), ($query->{_fields} ? @{$query->{_fields}} : ()) ]
+  );
+
+
+  my %field_types_by_attr = map { $_->{attname} => $_->{t} } @$field_types;
 
   my %exclude_fields = $query->{_exclude_fields} ? map { $_=>1} @{$query->{_exclude_fields}} : ();
   if(my $flds = $query->{_fields}) { 
@@ -64,13 +72,12 @@ $perl$
 	$q->{select} = [
 		map  { 'm.'.quote_ident($_->{attname}) }  
 		grep { !$exclude_fields{$_->{attname}} } 
-		@{ $field_types->{rows} } 
+		@$field_types 
 	];
   } else { 
 	$q->{select} = ['m.*'];
   }
 
-  
 
 # smart pre-triggers for all superclasses
   my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
@@ -87,6 +94,23 @@ $perl$
 					[ $user_id, $q, $query ] 
 		);
 #		warn "done $o->{schema}.query_$o->{tablename} c=\n";
+
+		if(my $ef = $q->{exclude_fields}) {   ## надо убрать из списка select некие поля.
+			my %to_exclude = map { ("m.$_"=>1, $_=>1) } map { quote_ident($_) }  @$ef;
+
+			if( scalar grep { $_ eq 'm.*' } @{ $q->{select} } ) {
+				$field_types = $get_field_types->('true', []);
+			}
+			$q->{select} = [
+				grep { ! $to_exclude{ $_ } }
+				map { 
+					( $_ eq 'm.*' ) # заменим это на конкретный список всех полей, чтобы можно было исключить отдельные из них
+					? ( map { 'm.'.quote_ident($_->{attname}) } @$field_types )
+					: $_
+				}
+				@{ $q->{select} }
+			];
+		}
 
 	}
   }

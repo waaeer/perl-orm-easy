@@ -46,7 +46,7 @@ CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
 $$;
 
 CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id idtype, privilege_name text, object_ids text[] = NULL) 
-	RETURNS bool LANGUAGE SQL SECURITY DEFINER AS $$
+	RETURNS bool LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$
 	SELECT EXISTS(SELECT * FROM auth.user_privileges up 
 		JOIN auth.privilege p ON p.id = up.privilege 
 		WHERE up."user" = user_id AND p.name = privilege_name AND 
