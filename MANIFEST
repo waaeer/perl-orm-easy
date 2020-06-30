@@ -13,6 +13,8 @@ Makefile.PL
 MANIFEST
 README.md
 LICENSE
+sql/00_idtype_int4.sql
+sql/00_plperl.sql
 sql/can_object.sql
 sql/delete.sql
 sql/functions.sql
