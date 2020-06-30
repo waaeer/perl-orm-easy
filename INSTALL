@@ -5,6 +5,7 @@ sql/tables.sql
 sql/rbac_tables.sql
 sql/rbac_data.sql
 sql/functions.sql 
+sql/rbac_functions.sql
 sql/can_object.sql
 sql/delete.sql 
 sql/save.sql 
@@ -12,4 +13,4 @@ sql/mget.sql
 sql/presave__traceable.sql 
 sql/store_file.sql
 sql/treeget.sql 
-sql/rbac_functions.sql
+sql/set_order.sql

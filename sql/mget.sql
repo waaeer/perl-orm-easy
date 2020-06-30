@@ -194,7 +194,7 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 	}
   }
 
-  if(my $s=$query->{with_permissions}) { 
+  if(my $s=$query->{with_permissions}) {
 	my $bb = $#{$q->{bind}} + 2;
 	push @{$q->{outer_select}}, sprintf(q!
 		 orm.can_update_object($%d, $%d, m.id::text, NULL) as can_edit,
@@ -290,6 +290,27 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 #warn "ret list is ", Data::Dumper::Dumper($ret{list});
   unless ($query->{without_count}) { 
 	$ret{n} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
+  }
+
+#### For Pg < 13 whith transforms for bool: fix bools in rows manually
+  my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
+		SELECT attname
+		FROM pg_attribute a
+		JOIN pg_type t ON a.atttypid = t.oid
+		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
+		  AND a.attnum>0
+		  AND t.typcategory = 'B'
+	!, [ 'text', 'text'],
+	   [ $schema, $tablename]
+	)->{rows};
+
+  if($bool_fields && @$bool_fields) {
+	foreach my $o (@{$ret{list}}) {
+		foreach my $f (@$bool_fields) {
+			my $fn = $f->{attname};
+			$o->{$fn} = $o->{$fn} eq 'f' ? 0 : 1;
+		}
+	}
   }
 
 ########## Smart postprocess-triggers for all superclasses (including this class)

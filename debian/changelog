@@ -1,7 +1,12 @@
+liborm-easy-perl (0.2-1) unstable; urgency=medium
+
+  * multiple improvements, still alpha
+
+ -- Ivan Panchenko <wao@mail.ru>  Wed, 1 Jul 2020 00:56:00 +0300
+
 liborm-easy-perl (0.1-1) unstable; urgency=medium
 
   * in-database PostgreSQL ORM
 
  -- Ivan Panchenko <wao@mail.ru>  Sat, 3 Aug 2019 11:42:00 +0300
-
 
