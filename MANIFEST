@@ -30,4 +30,5 @@ sql/set_order.sql
 sql/store_file.sql
 sql/tables.sql
 sql/treeget.sql
+sql/upgrade/000_metadata_public_readable.sql
 

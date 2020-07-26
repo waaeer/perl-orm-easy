@@ -8,6 +8,7 @@ CREATE TABLE orm._traceable (
 
 CREATE TABLE orm.metadata (
 	id idtype PRIMARY KEY DEFAULT nextval('orm.id_seq'),
+	public_readable bool not null default false,
 	name text
 );
 CREATE UNIQUE INDEX metadata_name ON orm.metadata(name);

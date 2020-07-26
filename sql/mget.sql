@@ -18,7 +18,7 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], order=>[], types=>[], with=>[]};
+  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], types=>[], with=>[]};
 
 # простые поля
 #  ...
@@ -253,7 +253,11 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
   my $order     = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
   my $sel       = join(', ', @{$q->{select}});
   my $outer_sel = join(', ', @{$q->{outer_select}});
-  my $join      = @{$q->{joins}}      ?  join('  ', map { "JOIN      $_ " } @{$q->{joins}}) : '';
+  my $join      = join('  ', (
+					( map { "JOIN      $_ " } @{$q->{joins}} ),
+					( map { "LEFT JOIN $_ " } @{$q->{internal_left_joins}})   # left joins needed for where, so used in internal select.
+  ));
+
   my $ljoin     = @{$q->{left_joins}} ?  join('  ', map { "LEFT JOIN $_ " } @{$q->{left_joins}}) : '';  
   my $with      = @{$q->{with}}       ?  join(', ', @{$q->{with}}) : '';
   my ($limit,@pagebind,@pagetypes) = ('');

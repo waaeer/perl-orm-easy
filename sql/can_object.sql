@@ -39,7 +39,7 @@ CREATE OR REPLACE FUNCTION orm.can_view_objects(user_id idtype, classname text) 
 			)  
 			SELECT m.id FROM main_class, orm.get_inheritance_tree(main_class.nsp,main_class.tbl) x, orm.metadata m 
 	 		 WHERE m.name = x.schema || '.' || x.tablename 
-			   AND auth_interface.check_privilege(user_id, 'view_objects', ARRAY[m.id::text])
+			   AND (m.public_readable OR auth_interface.check_privilege(user_id, 'view_objects', ARRAY[m.id::text]))
 		);
 
  

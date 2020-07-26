@@ -34,9 +34,9 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
 			);
 
 #			warn "call $o->{schema}.predelete_$o->{tablename}\n";
-			my $changes = ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("predelete_$o->{tablename}").'($1, $2, $3) AS x',
-				[ 'idtype', 'idtype', 'jsonb' ],
-				[ $user_id, $id, $old_data] 
+			my $changes = ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("predelete_$o->{tablename}").'($1, $2, $3, $4, $5) AS x',
+				[ 'idtype', 'idtype', 'jsonb' , 'text', 'text', ],
+				[ $user_id, $id, $old_data, $schema, $tablename ] 
 			)->{rows}->[0]->{x};
 #			warn "done $o->{schema}.predelete_$o->{tablename}\n";
 
@@ -58,9 +58,9 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
 #		warn "try post $o->{schema} $o->{tablename}\n";
 		if(@$func) { 
 #			warn "call $o->{schema}.postdelete_$o->{tablename}\n";
-			ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("postdelete_$o->{tablename}").'($1, $2, $3) AS x',
-				[ 'idtype', 'idtype',  'jsonb', ],
-				[ $user_id, $id, $old_data] 
+			ORM::Easy::SPI::spi_run_query('select '.quote_ident($o->{schema}).'.'.quote_ident("postdelete_$o->{tablename}").'($1, $2, $3, $4, $5) AS x',
+				[ 'idtype', 'idtype',  'jsonb', 'text', 'text', ],
+				[ $user_id, $id, $old_data, $schema, $tablename ] 
 			);
 #			warn "done $o->{schema}.postdelete_$o->{tablename}\n";
 		}
