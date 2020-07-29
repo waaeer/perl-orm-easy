@@ -1,0 +1,2 @@
+sql/*.sql         /usr/share/orm-easy
+sql/upgrade/*.sql /usr/share/orm-easy/upgrade
