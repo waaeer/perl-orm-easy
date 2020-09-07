@@ -26,3 +26,17 @@ CREATE TABLE orm._file (
 CREATE UNIQUE INDEX file_checksum ON orm._file(checksum);
 CREATE INDEX file_path ON orm._file(path);
 
+CREATE TABLE orm.history_log (
+    relname text not null,
+    id      idtype not null,
+    time    timestamptz not null default now(),
+    data    json,
+    "user"  idtype
+);
+CREATE TABLE orm.delete_log(
+    relname text not null,
+    id      idtype not null,
+    time    timestamptz not null default now(),
+    "user"  idtype
+);
+

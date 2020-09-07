@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id t
 
 	my $id_in_data = delete $jsondata->{id}; # так можно явно задать id для нового объекта
 	my %ids;
-	$id = ORM::Easy::SPI::make_new_id($id ||  $id_in_data, $context, \%ids);
+	$id = ORM::Easy::SPI::make_new_id(($op eq 'insert' ? ($id_in_data || $id) : $id), $context, \%ids);
     my $data = $jsondata; 
 
 ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
