@@ -8,7 +8,11 @@ CREATE OR REPLACE VIEW auth.user_privileges AS
 			CASE WHEN rp.parametric[1] THEN ur.objects[1] ELSE rp.objects[1] END,
 			CASE WHEN rp.parametric[2] THEN ur.objects[2] ELSE rp.objects[2] END
 		  ] AS objects
-	FROM auth.role_privileges rp JOIN auth.user_roles ur ON ur.role = rp.role JOIN auth.privilege p ON p.id = rp.privilege ;
+	FROM auth.role_privileges rp 
+		JOIN auth.user_roles ur ON ur.role = rp.role 
+		JOIN auth.privilege p ON p.id = rp.privilege 
+		WHERE (ur.expires IS NULL OR ur.expires > now())
+	;
 
 /* CREATE VIEW auth.user_privileges AS
     SELECT pr.person, p.name, (
@@ -30,6 +34,8 @@ CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
 	BEGIN
 		IF name ~ '^\d+$' THEN 
 			RETURN name::int;
+		ELSIF name = '__all__' THEN
+			RETURN NULL;
 		ELSE 
 			arr = parse_ident(tablename);
 			sql = 'select id from ' || quote_ident(arr[1]) || '.' || quote_ident(arr[2]) || ' WHERE name = $1'; 
@@ -61,6 +67,13 @@ CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id idtype, privil
 	);
 $$;
 
+CREATE OR REPLACE FUNCTION auth_interface.get_privilege_objects(user_id idtype, privilege_name text)
+	RETURNS table (objects idtype[])  LANGUAGE SQL IMMUTABLE AS $$
+	SELECT objects
+		FROM auth.user_privileges up 
+		JOIN auth.privilege p ON p.id = up.privilege 
+		WHERE up."user" = user_id AND p.name = privilege_name;
+$$;
 
 
 
@@ -89,26 +102,31 @@ CREATE OR REPLACE FUNCTION auth_interface.check_privileges (user_id idtype, priv
 $$;
 
 
-CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id idtype, grantee_id idtype, role_ text, objects_ idtype[]) RETURNS VOID SECURITY DEFINER LANGUAGE PLPGSQL AS $$
+CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id idtype, grantee_id idtype, role_ text, objects_ idtype[], expires_ timestamptz = NULL) RETURNS VOID SECURITY DEFINER LANGUAGE PLPGSQL AS $$
 	DECLARE role_id idtype; 
 	        can_do BOOL;
+			role_name TEXT;
 			role_checker TEXT;
 			inserted_id idtype;
 	BEGIN
-		SELECT id INTO role_id FROM auth.role WHERE name = role_;
-		IF NOT FOUND THEN
-			RAISE EXCEPTION 'No such role %', role_;
+		IF role_ ~ '^[0-9]+$' THEN
+			role_id = role_::idtype;
+		ELSE 
+			SELECT id INTO role_id FROM auth.role WHERE name = role_;
+			IF NOT FOUND THEN
+				RAISE EXCEPTION 'No such role %', role_;
+			END IF;
 		END IF;
+		SELECT name INTO STRICT role_name FROM auth.role WHERE id = role_id;
 
-		INSERT INTO auth.user_roles ("user", created_by, role,  objects) VALUES (grantee_id, user_id, role_id,  objects_)
-				 ON CONFLICT ("user", role, objects) DO NOTHING -- роль уже есть у него			
+		INSERT INTO auth.user_roles ("user", created_by, role,  objects, expires) VALUES (grantee_id, user_id, role_id,  objects_, expires_)
 				 RETURNING id INTO inserted_id;
 		IF inserted_id IS NOT NULL THEN 
 			RAISE NOTICE 'inserted user_roles %; check permission', inserted_id;
-			role_checker = 'can_add_role_' || role_;
+			role_checker = 'can_add_role_' || role_name;
 			EXECUTE 'select auth.' || quote_ident(role_checker) || '($1, $2, $3)' INTO can_do USING user_id, grantee_id, objects_;
 			IF NOT can_do THEN 
-				RAISE EXCEPTION 'Not allowed % to add role % on % to user %', user_id, role_, objects_, grantee_id;
+				RAISE EXCEPTION 'Not allowed % to add role % on % to user %', user_id, role_name, objects_, grantee_id;
 			END IF;
 		END IF;
 	END;	
@@ -168,7 +186,8 @@ CREATE OR REPLACE FUNCTION auth_interface.mod_user_roles(user_id idtype, grantee
 		IF auth_interface.check_privilege(user_id, 'manage_internal_users')  THEN
 			FOR i IN 1 .. COALESCE(array_length(__add,1),0) LOOP
 				SELECT array_agg(x::idtype) INTO __objects FROM jsonb_array_elements_text(__add[i]->'objects') x;
-				INSERT INTO auth.user_roles ("user",role, created_by, objects) VALUES (grantee_id, (__add[i]->>'role')::idtype, user_id, __objects) ON CONFLICT DO NOTHING;
+				INSERT INTO auth.user_roles ("user",role, created_by, objects, expires) VALUES (grantee_id, (__add[i]->>'role')::idtype, user_id, __objects, (__add[i]->>'expires')::timestamptz) 
+					ON CONFLICT DO NOTHING;
 			END LOOP;
 			FOR i IN 1 .. COALESCE(array_length(_del,1),0) LOOP
 				DELETE FROM auth.user_roles WHERE "user" = grantee_id AND id = _del[i]; -- todo: who?

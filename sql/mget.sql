@@ -248,7 +248,6 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 	$table = '('. join(' UNION ALL ', map { "SELECT $_->{all_fields},".quote_literal($_->{classname})." AS __class FROM $_->{tablename}" } @$subclasses ). ') ';
   }
 
-
   my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', @{$q->{wheres}}) : '';
   my $order     = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
   my $sel       = join(', ', @{$q->{select}});
@@ -312,7 +311,9 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 	foreach my $o (@{$ret{list}}) {
 		foreach my $f (@$bool_fields) {
 			my $fn = $f->{attname};
-			$o->{$fn} = $o->{$fn} eq 'f' ? 0 : 1;
+			if(defined $o->{$fn}) { 
+				$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
+			}
 		}
 	}
   }
