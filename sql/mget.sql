@@ -156,6 +156,14 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 				push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
 				push @{$q->{bind}},  $vv;
 			}
+			elsif(my $vv = $v->{contains_or_null}) { 
+				if($type->[3] eq 'A') { # for array data types
+					my $qn = quote_ident($f);
+					push @{$q->{wheres}}, sprintf('(m.%s && $%d OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
+					push @{$q->{types}},  $type->[0].'.'.$type->[1];
+					push @{$q->{bind}},  $v;
+				}
+			}
 			else { 
 				die("Cannot understand query: ".ORM::Easy::SPI::to_json($v));
 			}	
@@ -248,7 +256,7 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 	$table = '('. join(' UNION ALL ', map { "SELECT $_->{all_fields},".quote_literal($_->{classname})." AS __class FROM $_->{tablename}" } @$subclasses ). ') ';
   }
 
-  my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', @{$q->{wheres}}) : '';
+  my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', map {"($_)" } @{$q->{wheres}}) : '';
   my $order     = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
   my $sel       = join(', ', @{$q->{select}});
   my $outer_sel = join(', ', @{$q->{outer_select}});
