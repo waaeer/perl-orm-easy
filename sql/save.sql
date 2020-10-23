@@ -147,6 +147,22 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 			my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d)$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
 			push @types, $type;
 			push @args, sprintf('[%s,%s]', @bounds);
+		} elsif ($type eq 'daterange' && ref($val) eq 'HASH') { 
+			my ($lower,$upper, $lok, $uok);
+			if (exists $val->{upper}) { $upper = $val->{upper}; $uok = 1; } 
+			if (exists $val->{lower}) { $lower = $val->{lower}; $lok = 1; } 
+			if ($upper && ($upper !~ /^(\d\d\d\d)-(\d\d)-(\d\d).*$/)) { die("Bad format of upper bound for range $f"); }
+			if ($lower && ($lower !~ /^(\d\d\d\d)-(\d\d)-(\d\d).*$/)) { die("Bad format of lower bound for range $f"); }
+			my $qf = quote_ident($f);
+			if($lok || $uok) { 
+				if ($op eq 'update') { 
+					my $interval = ($lok ? "'$lower'": "coalesce(lower($qf)::text,'')") . "|| ',' ||" . ($uok ? "'$upper'" : "coalesce(upper($qf)::text,'')");
+					$exprs{$f} = qq!(case when lower_inc($qf) then '[' else '(' end || $interval || case when upper_inc($qf) then ']' else ')' end )::daterange  !;
+				} else {
+					my $interval = ($lok ? "'$lower'": "") . "|| ',' ||" . ($uok ? "$upper" : "");
+					$exprs{$f} = qq!'[' || $interval || ']::daterange'!;
+				}
+			}
 		} elsif ($type eq 'tstzrange' && ref($val) eq 'ARRAY') { 
 			my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d).*$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
 			push @types, $type;
