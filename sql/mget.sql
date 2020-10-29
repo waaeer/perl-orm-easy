@@ -18,7 +18,7 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], types=>[], with=>[]};
+  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[]};
 
 # простые поля
 #  ...
@@ -28,6 +28,9 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 		my $dir = '';
 		if($ordf =~ /^\-(.*)$/) { 
 			$dir = ' DESC'; $ordf = $1;
+		}
+		if($ordf =~ /^(\w+)\.(\w+)$/) {
+			push @order_fields, (quote_ident($1).'.'.quote_ident($2), $dir);
 		}
 		push @order_fields, [$ordf,$dir];
 	}
@@ -164,6 +167,18 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 					push @{$q->{bind}},  $v;
 				}
 			}
+			elsif(my $vv = $v->{not}) { 
+				if($type->[3] eq 'A') { # for array data types
+					my $qn = quote_ident($f);
+					push @{$q->{wheres}}, sprintf('(NOT (m.%s && $%d) OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
+					push @{$q->{types}},  $type->[0].'.'.$type->[1];
+					push @{$q->{bind}},  $v;
+				}	else {
+					push @{$q->{wheres}}, sprintf('NOT m.%s=ANY($%d)', quote_ident($f), $#{$q->{bind}}+2 );
+					push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
+					push @{$q->{bind}},  $vv;
+				}
+			}
 			else { 
 				die("Cannot understand query: ".ORM::Easy::SPI::to_json($v));
 			}	
@@ -192,7 +207,7 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 	}
   }
   # order
-#warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
+# warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
   foreach my $ord (@order_fields) { 
 	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
 		push @{$q->{order} ||= []},  quote_ident($ord->[0]).$ord->[1];
@@ -257,7 +272,9 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
   }
 
   my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', map {"($_)" } @{$q->{wheres}}) : '';
-  my $order     = @{$q->{order}}  ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
+  my $order     = @{$q->{order}}     ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
+  my $ext_order = @{$q->{ext_order}} ? 'ORDER BY '.join(', ', @{$q->{ext_order}}) : $order;
+ 
   my $sel       = join(', ', @{$q->{select}});
   my $outer_sel = join(', ', @{$q->{outer_select}});
   my $join      = join('  ', (
@@ -276,21 +293,37 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
 
   my ($sql,$nsql,@treebind);
   my $uwith = $with ? "WITH $with " : "";
-  if(my $p = $query->{__root}) { 
-	my $top_where = ($where ? "$where AND " : "WHERE "). sprintf("(m.parent = \$%d)", $#{$q->{bind}} + $#pagebind + 3);
-	push @pagebind, $p;
-	push @pagetypes,'idtype';
+  my $tree_root = $query->{__root};
+  
+  if($tree_root || $query->{__tree} ) { 
+	my $top_where = ($where ? "$where AND " : "WHERE ");
+	if($tree_root) { 
+		$top_where .= sprintf("(m.parent = \$%d)", $#{$q->{bind}} + $#pagebind + 3);
+		push @pagebind, $tree_root;
+		push @pagetypes,'idtype';
+	} else { 
+		$top_where .="m.parent IS NULL";
+	}
+	my ($top_sel,$node_sel)=('','');
+	if($query->{__tree} eq 'ordered') { 
+		$ext_order = 'ORDER BY _pos_path'; 
+		$top_sel = q!, ARRAY[m.pos] AS _pos_path!;
+		$node_sel = q!, __tree._pos_path || ARRAY[m.pos] AS _pos_path!;
+		$outer_sel.=", parent, _pos_path";
+	}
+
+
 	my $child_where  = ($where ? "$where AND " : "WHERE "). 'm.parent = __tree.id';
 	my $rwith = $with  ? " $with," : '';
 	$sql = "WITH $rwith RECURSIVE __tree AS (
-	                                SELECT $sel FROM $table m $join  $top_where
+	                                SELECT $sel $top_sel FROM $table m $join  $top_where
 					UNION ALL
-	                                SELECT $sel FROM $table m $join, __tree $child_where 
+	                                SELECT $sel $node_sel FROM $table m $join, __tree $child_where 
 			)
-			SELECT $outer_sel FROM (SELECT $sel FROM __tree m ".($limit ? "$order $limit" : ""). ") m $ljoin $order 
+			SELECT $outer_sel FROM (SELECT $sel FROM __tree m ".($limit ? "$order $limit" : ""). ") m $ljoin $ext_order 
 			";
   } else { 
-	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where ".($limit ? "$order $limit" : ""). ") m $ljoin $order";
+	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where ".($limit ? "$order $limit" : ""). ") m $ljoin $ext_order";
   }  
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 

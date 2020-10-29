@@ -14,10 +14,10 @@ CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id
     if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
 			[ 'name', 'name'], [ $schema, "can_delete_$tablename"])) {
 		ORM::Easy::SPI::spi_run_query_bool('select '.quote_ident($schema).'.'.quote_ident("can_delete_$tablename").'($1,$2)', ['idtype', 'text'], [$user_id, $id])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete'}));
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete', reason=>1}));
     } else { 
 		ORM::Easy::SPI::spi_run_query_bool('select orm.can_delete_object($1,$2,$3)', ['idtype', 'text','text'], [$user_id, quote_ident($schema).'.'.quote_ident($tablename), $id])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete'}));
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>'delete', reason=>2}));
 	}
 
 # smart pre-triggers for all superclasses
