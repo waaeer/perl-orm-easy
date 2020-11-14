@@ -42,6 +42,9 @@ CREATE TABLE auth.user_roles (
 	objects idtype[]
 );
 
+CREATE INDEX user_roles_u ON auth.user_roles ("user");
+CREATE INDEX user_roles_r ON auth.user_roles (role);
+
 
 CREATE TABLE auth.role_privileges ( 
 	id	idtype PRIMARY KEY DEFAULT nextval('orm.id_seq'),
@@ -51,6 +54,7 @@ CREATE TABLE auth.role_privileges (
 	parametric BOOL[]
 );
 CREATE UNIQUE INDEX role_privileges_uq ON auth.role_privileges (role,privilege,coalesce(objects,ARRAY[]::idtype[]),coalesce(parametric, ARRAY[]::bool[]));
+CREATE INDEX role_privlieges_p ON auth.role_privileges (privilege);
 
 
 

@@ -22,6 +22,7 @@ sql/functions.sql
 sql/id_seq.sql
 sql/mget.sql
 sql/presave__traceable.sql
+sql/query__traceable.sql
 sql/rbac_data.sql
 sql/rbac_functions.sql
 sql/rbac_tables.sql

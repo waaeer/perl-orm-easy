@@ -3,11 +3,7 @@ CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_
 $perl$
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
 
-  my $debug = 0;
   my $table = quote_ident($schema).'.'.quote_ident($tablename);
-
-warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
-
 
   # контроль доступа. В перспективе - более гранулярный
   my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
@@ -327,6 +323,8 @@ warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if
   }  
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
+  my $debug = $q->{debug};
+warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
 warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind) if $debug;
   my %ret;
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
