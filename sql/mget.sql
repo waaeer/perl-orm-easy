@@ -14,7 +14,7 @@ $perl$
 
   my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 	
-  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[]};
+  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[], group=>[], aggr=>[]};
 
 # простые поля
 #  ...
@@ -75,6 +75,18 @@ $perl$
 	];
   } else { 
 	$q->{select} = ['m.*'];
+  }
+
+  my $aggr = sub { 
+	my $n = shift;
+	return 'count(*)' if $n eq 'count'; 
+	return undef;
+  };
+  if(my $g = $query->{_group}) { 
+	$q->{group} = [ map { 'm.'.quote_ident($_) } (ref($g) ? @$g : ($g)) ];
+	if(my $ag = $query->{_aggr}) {
+		$q->{aggr} = [ map { $aggr->($_) || die("Unknown aggreagate $_") } (ref($ag) ? @$ag : ($ag)) ];
+	}
   }
 
 
@@ -280,6 +292,15 @@ $perl$
 
   my $ljoin     = @{$q->{left_joins}} ?  join('  ', map { "LEFT JOIN $_ " } @{$q->{left_joins}}) : '';  
   my $with      = @{$q->{with}}       ?  join(', ', @{$q->{with}}) : '';
+  my $group;
+  if( @{$q->{group}}) { 
+	$group = "GROUP BY ".join(', ', @{$q->{group}});
+	$outer_sel = join(', ', @{$q->{group}}, @{$q->{aggr}});
+  } else { 
+	$group = '';
+  }
+
+
   my ($limit,@pagebind,@pagetypes) = ('');
   if($pagesize) { 
 	  $limit = sprintf("LIMIT \$%d OFFSET \$%d", $#{$q->{bind}}+2, $#{$q->{bind}}+3);
@@ -316,10 +337,15 @@ $perl$
 					UNION ALL
 	                                SELECT $sel $node_sel FROM $table m $join, __tree $child_where 
 			)
-			SELECT $outer_sel FROM (SELECT $sel FROM __tree m ".($limit ? "$order $limit" : ""). ") m $ljoin $ext_order 
-			";
+			SELECT $outer_sel FROM (SELECT $sel FROM __tree m ".
+			($limit && !$group? "$order $limit" : "").
+			 ") m $ljoin $group $ext_order ".
+			($limit && $group ? "$order $limit" : "");
   } else { 
-	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where ".($limit ? "$order $limit" : ""). ") m $ljoin $ext_order";
+	$sql = "$uwith SELECT $outer_sel FROM (SELECT $sel FROM $table m $join$where  ".
+			($limit && !$group ? "$order $limit" : ""). 
+			") m $ljoin $group $ext_order " .
+			($limit && $group ? "$order $limit" : "");
   }  
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
@@ -330,7 +356,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
 
 #warn "ret list is ", Data::Dumper::Dumper($ret{list});
-  unless ($query->{without_count}) { 
+  if ($query->{without_count}) { 
 	$ret{n} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
 
