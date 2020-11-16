@@ -225,6 +225,12 @@ $perl$
 		die("Unknown order expression '$ord->[0]'");
 	}
   }
+  if($query->{with_can_update}) {
+	my $bb = $#{$q->{bind}} + 2;
+	push @{$q->{outer_select}}, sprintf(q!$%d.can_update_$%d($%d, m.id::text, '{}'::jsonb) AS can_edit!, $bb,$bb+1,$bb+2);
+	push @{$q->{types}}, 'text','text', 'idtype';
+	push @{$q->{bind}}, quote_ident($schema), quote_ident($tablename), $user_id;
+  }
 
   if(my $s=$query->{with_permissions}) {
 	my $bb = $#{$q->{bind}} + 2;
