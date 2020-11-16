@@ -22,13 +22,14 @@ $perl$
   if(my $ord = $query->{_order}) {
 	foreach my $ordf (ref($ord) ? @$ord : $ord) { 
 		my $dir = '';
-		if($ordf =~ /^\-(.*)$/) { 
-			$dir = ' DESC'; $ordf = $1;
+		if($ordf =~ /^\-(-?)(.*)$/) { 
+			$dir = ' DESC'; $ordf = $2; $dir .= ' NULLS LAST' if $1;
 		}
 		if($ordf =~ /^(\w+)\.(\w+)$/) {
-			push @order_fields, (quote_ident($1).'.'.quote_ident($2), $dir);
+			push @order_fields, [quote_ident($1).'.'.quote_ident($2), $dir];
+		} else {
+			push @order_fields, [$ordf,$dir];
 		}
-		push @order_fields, [$ordf,$dir];
 	}
   }
 
