@@ -28,7 +28,7 @@ CREATE OR REPLACE VIEW auth.user_privileges AS
 */
 
 CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
-	RETURNS idtype LANGUAGE PLPGSQL IMMUTABLE STRICT  AS $$
+	RETURNS idtype LANGUAGE PLPGSQL IMMUTABLE PARALLEL SAFE STRICT  AS $$
 	DECLARE arr text[];
 			id idtype; sql text;
 	BEGIN
@@ -52,7 +52,7 @@ CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
 $$;
 
 CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id idtype, privilege_name text, object_ids text[] = NULL) 
-	RETURNS bool LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$
+	RETURNS bool LANGUAGE SQL STABLE PARALLEL SAFE SECURITY DEFINER AS $$
 	SELECT EXISTS(SELECT * FROM auth.user_privileges up 
 		JOIN auth.privilege p ON p.id = up.privilege 
 		WHERE up."user" = user_id AND p.name = privilege_name AND 
@@ -68,7 +68,7 @@ CREATE OR REPLACE FUNCTION auth_interface.check_privilege(user_id idtype, privil
 $$;
 
 CREATE OR REPLACE FUNCTION auth_interface.get_privilege_objects(user_id idtype, privilege_name text)
-	RETURNS table (objects idtype[])  LANGUAGE SQL IMMUTABLE AS $$
+	RETURNS table (objects idtype[])  LANGUAGE SQL STABLE AS $$
 	SELECT objects
 		FROM auth.user_privileges up 
 		JOIN auth.privilege p ON p.id = up.privilege 
@@ -88,7 +88,7 @@ $$;
 
 
 CREATE OR REPLACE FUNCTION auth_interface.check_privileges (user_id idtype, privileges json) 
-	RETURNS SETOF auth_interface.checked_privileges LANGUAGE sql AS $$
+	RETURNS SETOF auth_interface.checked_privileges STABLE PARALLEL SAFE LANGUAGE sql AS $$
 	SELECT *
 		FROM ( SELECT 
 			case when (json_typeof(line)='array') then (line->>0)::text else line#>>'{}' end as privilege_name,

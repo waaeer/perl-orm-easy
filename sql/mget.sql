@@ -363,8 +363,12 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
   $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
 
 #warn "ret list is ", Data::Dumper::Dumper($ret{list});
-  if ($query->{without_count}) { 
-	$ret{n} = ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
+  if (!$query->{without_count}) {
+	my $l = length(@{$ret{list}});
+	$ret{n} = 
+		($l < $pagesize) 
+		? ($page-1)*$pagesize + $l
+		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
 
 #### For Pg < 13 whith transforms for bool: fix bools in rows manually
