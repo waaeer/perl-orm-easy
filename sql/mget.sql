@@ -187,8 +187,9 @@ $perl$
 					push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
 					push @{$q->{bind}},  $vv;
 				}
-			}
-			else { 
+			} elsif($v->{not_null}) { 
+				push @{$q->{wheres}}, sprintf('m.%s IS NOT NULL', quote_ident($f) );
+			} else { 
 				die("Cannot understand query: ".ORM::Easy::SPI::to_json($v));
 			}	
 		} else { 
@@ -364,14 +365,14 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 
 #warn "ret list is ", Data::Dumper::Dumper($ret{list});
   if (!$query->{without_count}) {
-	my $l = length(@{$ret{list}});
+	my $l = scalar(@{$ret{list}});
 	$ret{n} = 
 		($l < $pagesize) 
 		? ($page-1)*$pagesize + $l
 		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
 
-#### For Pg < 13 whith transforms for bool: fix bools in rows manually
+#### For Pg < 13 without transforms for bool: fix bools in rows manually
   my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname
 		FROM pg_attribute a
