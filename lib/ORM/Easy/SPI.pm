@@ -842,8 +842,6 @@ sub _delete {
 # todo: засунуть user_id в сессионный контекст, чтобы подхватить его из триггеров - и то же в orm_interface.remove для триггера delete_history
 #	warn "Called delete($schema, $tablename, $id, $user_id, $context)\n";
 
-  	$context &&= ORM::Easy::SPI::from_json($context);
-	
     ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
 
     ## toDo надо обработать ситуацию отсутствия этой функции
@@ -903,7 +901,7 @@ sub _delete {
 		}
 	}
 
-    return ORM::Easy::SPI::to_json({ok=>1});
+    return {ok=>1};
 }
 
 
