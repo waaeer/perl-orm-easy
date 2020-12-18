@@ -320,8 +320,9 @@ sub _mget {
 		}
 		if($q->{modify_query}) {
 			foreach my $k (keys %{$q->{modify_query}}) {
-				if($k eq '__delete') { delete $query->{$k}; }
-				else 				 { $query->{$k} = $q->{modify_query}->{$k}; }
+				my $v = $q->{modify_query}->{$k};
+				if($k eq '__delete') { if(ref($v)) { foreach my $vv (@$v) { delete $query->{$vv}; }} else { delete $query->{$v}; } }
+				else 				 { $query->{$k} = $v; } 
 			}
 		}
 
@@ -558,7 +559,7 @@ sub _mget {
   }
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
-  my $debug = $q->{debug};
+  my $debug = $query->{__debug};  # foDo: check permissions
 warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
 warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind) if $debug;
   my %ret;
