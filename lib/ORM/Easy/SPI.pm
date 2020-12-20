@@ -629,11 +629,11 @@ sub _save {
 # todo: засунуть user_id в сессионный контекст, чтобы подхватить его из триггеров - и то же в orm_interface.remove для триггера delete_history
 #	warn "Called save($schema, $tablename, $id, $user_id, $jsondata, $context)\n";
 
-    my $op = (defined $id && ($id=~/^\-?\d+$/)) ? 'update' : 'insert';
-
+	my $id_is_defined = defined ($id) && ($id=~/^\-?\d+$/);
 	my $id_in_data = delete $jsondata->{id}; # так можно явно задать id для нового объекта
-	my %ids;
-	$id = ORM::Easy::SPI::make_new_id(($op eq 'insert' ? ($id_in_data || $id) : $id), $context, \%ids);
+	my (%ids);
+	$id = ORM::Easy::SPI::make_new_id(($id_is_defined  ? $id : ($id_in_data || $id)), $context, \%ids);
+    my $op = $id_is_defined || ( $context && $context->{_created_ids} && $context->{_created_ids}->{$id} ) ? 'update' : 'insert';
     my $data = $jsondata;
 
 ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
@@ -817,6 +817,7 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 
 ## RUN postsaves
 	$id = $obj->{id};
+	if($op eq 'insert' && $context) { ($context->{_created_ids} ||= {})->{$id} = 1; } 
 
 	foreach my $o ( @{ $superclasses->{rows} }) {
 		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
@@ -833,7 +834,7 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 	}
 
 	warn "Exiting save\n" if $debug;
-    return {a=> $obj, b=>{_ids=>\%ids}};
+    return {a=> $obj, b=>{_ids=>\%ids, _created_ids=>$context->{_created_ids}}};
 }
 
 ######################################################### DELETE ##########################################
