@@ -410,6 +410,13 @@ sub _mget {
 				} else {
 					push @{$q->{wheres}}, sprintf('m.%s IS NULL', ::quote_ident($f));
 				}
+			} elsif ($type->[3] eq 'B') { 
+				if(defined $v) { 
+					push @{$q->{wheres}}, ($v ? '' : 'NOT '). 'm.'. ::quote_ident($f); 
+				} else { 
+					push @{$q->{wheres}}, sprintf('m.%s IS NULL', ::quote_ident($f));
+				}
+					
 			} else {
 				push @{$q->{wheres}}, sprintf('m.%s=$%d', ::quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}}, $type->[0].'.'.$type->[1];
