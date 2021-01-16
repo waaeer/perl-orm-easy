@@ -13,6 +13,7 @@ use locale;
 
 require "utf8_heavy.pl";
 my $log_mode = 0;
+our %tmp_cache;
 
 sub uniq_array {
 	my %x;
@@ -199,6 +200,8 @@ sub list2plaintree {
 sub _mget {
   my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
   my $table = ::quote_ident($schema).'.'.::quote_ident($tablename);
+
+  %ORM::Easy::SPI::tmp_cache = ();
 
   # контроль доступа. В перспективе - более гранулярный
   my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
@@ -624,7 +627,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 
 	}
   }
-
+  %ORM::Easy::SPI::tmp_cache = ();
   return \%ret;
 }
 
