@@ -54,6 +54,16 @@ sub parse_timerange {
 	return [$1,$2,$3,$4];
 }
 
+sub array2daterange {
+	my $val = shift;
+	if($val) { 
+		my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d)$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
+		return sprintf('[%s,%s]', @bounds);
+	} else {
+		return undef;
+	}
+}	
+
 sub make_new_id {
 	my ($id, $context, $ids) = @_;
 	if (defined $id && ( $id =~ /^\-?\d+$/)) {
@@ -778,9 +788,8 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 				push @args,  $val;
 			}
 		} elsif ($type eq 'daterange' && ref($val) eq 'ARRAY') {
-			my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d)$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
 			push @types, $type;
-			push @args, sprintf('[%s,%s]', @bounds);
+			push @args, jsonarray2daterange($val);
 		} elsif (($type =~ /^(tstz|date)range$/) && ref($val) eq 'HASH') {
 			my ($lower,$upper, $lok, $uok);
 			if (exists $val->{upper}) { $upper = $val->{upper}; $uok = 1; }
