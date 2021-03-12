@@ -431,9 +431,13 @@ sub _mget {
 				}
 					
 			} else {
-				push @{$q->{wheres}}, sprintf('m.%s=$%d', ::quote_ident($f), $#{$q->{bind}}+2 );
-				push @{$q->{types}}, $type->[0].'.'.$type->[1];
-				push @{$q->{bind}},  $v;
+				if(defined $v) { 
+					push @{$q->{wheres}}, sprintf('m.%s=$%d', ::quote_ident($f), $#{$q->{bind}}+2 );
+					push @{$q->{types}}, $type->[0].'.'.$type->[1];
+					push @{$q->{bind}},  $v;
+				} else {
+					push @{$q->{wheres}}, sprintf('m.%s IS NULL', ::quote_ident($f));
+				}
 			}
 		}
 	}
