@@ -660,20 +660,8 @@ sub _save {
     my $op = $id_is_defined || ( $context && $context->{_created_ids} && $context->{_created_ids}->{$id} ) ? 'update' : 'insert';
     my $data = $jsondata;
 
-## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
-## проверка прав делается перед presave, т.к. в presave уже могут быть сделаны изменения в БД, влияющие на права доступа
+### мы должны сходить за атрибутами до проверки доступа, чтобы разрешить висячие ссылки
 
-warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
-#   toDo: scan superclasses
-
-    if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
-			[ 'name', 'name'], [ $schema, "can_${op}_$tablename"])) {
-		ORM::Easy::SPI::spi_run_query_bool('select '.::quote_ident($schema).'.'.::quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>1}));
-	} else {
-		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id, $data])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
-	}
 
     my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname,
@@ -690,6 +678,36 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 	!, ['text', 'text'], [$schema, $tablename]);
 
     my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
+	my @fields = sort keys %$data;
+	
+# Разрешим висячие ссылки
+	foreach my $f (@fields) {
+		my $val = $data->{$f};
+		my $t   = $field_types_by_attr{$f};
+		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
+		if($typcat eq 'N' && ($val=~/[^\-\d]/)) { 
+			$data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids);
+		}
+	}
+#
+
+## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
+## проверка прав делается перед presave, т.к. в presave уже могут быть сделаны изменения в БД, влияющие на права доступа
+
+
+
+warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
+#   toDo: scan superclasses
+
+    if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
+			[ 'name', 'name'], [ $schema, "can_${op}_$tablename"])) {
+		ORM::Easy::SPI::spi_run_query_bool('select '.::quote_ident($schema).'.'.::quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>1}));
+	} else {
+		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id, $data])
+		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
+	}
+
 
     $data->{changed_by} = $user_id if $field_types_by_attr{changed_by};
 
@@ -728,7 +746,7 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 		$data->{id} = $id;
 #		warn "id=$id\n";
 	}
-    my @fields = sort keys %$data;
+    @fields = sort keys %$data;
 	my (%exprs, @types, @args, @fields_ok);
 	my $n = 0;
 
