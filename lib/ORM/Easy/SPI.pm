@@ -503,7 +503,7 @@ sub _mget {
 		$c->{all_fields} = join(', ',  map {
 			$c->{by_field}->{$_} # если данное поле есть в таблице данного подкласса
 			? $_ . ( $transforms{$_} ? '::'.$transforms{$_} : '')
-			: 'NULL::'.::quote_ident($namespaces{$_}).'.'.::quote_ident($fields{$_});
+			: 'NULL::'.::quote_ident($namespaces{$_}).'.'.::quote_ident($fields{$_}).' AS '.::quote_ident($_);
 		} @fields);
 	}
 #warn "subclasses=".Data::Dumper::Dumper($subclasses);
@@ -683,10 +683,10 @@ sub _save {
 # Разрешим висячие ссылки
 	foreach my $f (@fields) {
 		my $val = $data->{$f};
-		my $t   = $field_types_by_attr{$f};
+		my $t   = $field_types_by_attr{$f} || die("Unknown field $f");
 		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
 		if($typcat eq 'N' && ($val=~/[^\-\d]/)) { 
-			$data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids);
+			$data->{$f}= $val eq 'me' ? $user_id : ORM::Easy::SPI::make_new_id($val, $context, \%ids);
 		}
 	}
 #
@@ -773,10 +773,11 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 			push @types, $type;
 			push @args,  defined($val) ? "\\x$val" : undef;
 
-		} elsif ($typcat eq 'N') {
-			push @types, $type;
-			push @args, !defined($val) || $val eq '' ? undef : ($data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids));
-
+#       Already done before
+#		} elsif ($typcat eq 'N') {
+#			push @types, $type;
+#			push @args, !defined($val) || $val eq '' ? undef : ($data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids));
+#
 		} elsif($type eq 'bool') {
             $exprs{$f} = defined $val ? ( $val ? 'true' : 'false' )  : 'NULL';
 			$n--;  # does not push args
