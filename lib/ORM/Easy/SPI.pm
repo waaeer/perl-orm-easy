@@ -667,7 +667,7 @@ sub _save {
 		SELECT attname,
 			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = t.typnamespace)::text,
 				t.typname::text,  t.typtype::text, t.typcategory::text,
-				et.typname::text, et.typcategory::text
+				et.typname::text, et.typcategory::text, a.attnum::text
 			 ] AS t
 			 FROM pg_type t
 			 LEFT JOIN pg_type et ON t.typelem = et.oid
@@ -684,9 +684,33 @@ sub _save {
 	foreach my $f (@fields) {
 		my $val = $data->{$f};
 		my $t   = $field_types_by_attr{$f} || die("Unknown field $f");
-		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
+		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat, $attnum) = @$t;
 		if($typcat eq 'N' && ($val=~/[^\-\d]/)) { 
-			$data->{$f}= $val eq 'me' ? $user_id : ORM::Easy::SPI::make_new_id($val, $context, \%ids);
+			if($val eq 'me') {
+				$data->{$f} = $user_id;
+				next;
+			} 
+			# если поле является ссылкой на объект с полем name
+			my $reference = ORM::Easy::SPI::spi_run_query_row(q! SELECT n.nspname, t.relname FROM
+				pg_constraint c JOIN pg_class t ON t.oid = c.confrelid JOIN pg_namespace n ON n.oid = t.relnamespace
+				WHERE c.contype = 'f' 
+				  AND c.conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
+				  AND c.conkey   = ARRAY[$3::smallint]
+				  AND EXISTS (SELECT * FROM pg_attribute WHERE attname = 'name' AND attrelid = c.confrelid)
+				!, [ 'text', 'text', 'smallint'], [$schema, $tablename, int($attnum)]);
+#warn "Seek for reference [$schema, $tablename, int($attnum)]\n";
+			if($reference) { 
+#warn "Reference is $reference->{nspname}.$reference->{relname} [$val]\n";
+				my $obj = ORM::Easy::SPI::spi_run_query_row(q!SELECT id FROM !.::quote_ident($reference->{nspname}).'.'.::quote_ident($reference->{relname}).q!
+					WHERE name = $1
+				!, ['text'], [$val]);
+				if($obj) { 
+					$data->{$f} = $obj->{id};
+					next;
+				}					
+			}
+			# иначе это новый объект
+			$data->{$f}= ORM::Easy::SPI::make_new_id($val, $context, \%ids);
 		}
 	}
 #
