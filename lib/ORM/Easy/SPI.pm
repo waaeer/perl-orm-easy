@@ -826,6 +826,9 @@ warn "Data=".Data::Dumper::Dumper($changes, $data);
 		} elsif (($typcat eq 'A' && $eltypecat eq 'N') && ref($val) eq 'ARRAY') {  # для числовых массивов
 			push @types, $type;
 			push @args, [ map { !defined($_) || $_ eq '' ? undef : ORM::Easy::SPI::make_new_id($_, $context, \%ids) } @$val];			
+		} elsif ($typcat eq 'N') {
+			push @types, "$tschema.$type";
+			push @args,  $val eq '' ? undef : $val;
 		} elsif ($type =~ /^timestamp/) {
 			if ($val eq 'now') {
 				$exprs{$f} = 'now()';

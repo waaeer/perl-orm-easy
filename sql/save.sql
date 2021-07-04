@@ -9,6 +9,9 @@ CREATE OR REPLACE FUNCTION orm_interface.jsonarray2daterange (val jsonb)
    	return ORM::Easy::SPI::array2daterange(@_);
 $perl$;
 
-
+CREATE OR REPLACE FUNCTION orm_interface.jsonarray2idtypearray (val jsonb)
+	RETURNS idtype[] STRICT IMMUTABLE PARALLEL SAFE LANGUAGE sql AS $$
+	SELECT array_agg(x::idtype) FROM jsonb_array_elements_text(val) x;
+$$;
 
 
