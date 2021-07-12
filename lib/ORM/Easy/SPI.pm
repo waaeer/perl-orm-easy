@@ -262,6 +262,7 @@ sub _mget {
 	!, [ 'text', 'text', 'text[]', 'bool'],
 	   [ $schema, $tablename, $fields, $take_all]
 	);
+	warn "field_types for ".Data::Dumper::Dumper($schema, $tablename, $fields, $take_all) if $query->{__debug};
 	return $field_types->{rows};
   };
 
@@ -335,14 +336,22 @@ sub _mget {
 			foreach my $k (keys %{$q->{modify_query}}) {
 				my $v = $q->{modify_query}->{$k};
 				if($k eq '__delete') { if(ref($v)) { foreach my $vv (@$v) { delete $query->{$vv}; }} else { delete $query->{$v}; } }
-				else 				 { $query->{$k} = $v; } 
+				else { 
+					$query->{$k} = $v; 
+					my $add_field_types = $get_field_types->('false', [$k]);
+					push @$field_types, @$add_field_types;
+					foreach my $tt (@$field_types) {
+						$field_types_by_attr{$tt->{attname}} = $tt->{t};
+					}
+				} 
 			}
 		}
 
 	}
   }
-
+warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query->{__debug};
   foreach my $f (keys %$query) {
+	warn "f=$f t=$field_types_by_attr{$f} v=$query->{$f};\n" if $query->{__debug};
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
 		if(ref($v) eq 'ARRAY') {
@@ -439,9 +448,12 @@ sub _mget {
 					push @{$q->{wheres}}, sprintf('m.%s IS NULL', ::quote_ident($f));
 				}
 			}
-		}
+		} 
 	}
   }
+
+
+warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__debug};
   # order
 # warn "order fields are ", Data::Dumper::Dumper(\@order_fields);
   foreach my $ord (@order_fields) {
