@@ -397,7 +397,7 @@ warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query
 					my $qn = ::quote_ident($f);
 					push @{$q->{wheres}}, sprintf('(m.%s && $%d OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
 					push @{$q->{types}},  $type->[0].'.'.$type->[1];
-					push @{$q->{bind}},  $v;
+					push @{$q->{bind}},  $vv;
 				}
 			}
 			elsif(my $vv = $v->{not}) {
