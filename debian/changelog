@@ -1,3 +1,9 @@
+liborm-easy-perl (0.3-2) unstable; urgency=medium
+
+  * minor fixes
+
+ -- Ivan Panchenko <wao@mail.ru>  Sat, 24 Jul 2021 00:00:00 +0300
+
 liborm-easy-perl (0.3-1) unstable; urgency=medium
 
   * moved major code from functions to the module;
