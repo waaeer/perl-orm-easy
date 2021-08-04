@@ -663,7 +663,7 @@ sub _save {
  my ($schema, $tablename, $id, $user_id, $jsondata, $context) = @_;
 	my $debug = 0;
 # todo: засунуть user_id в сессионный контекст, чтобы подхватить его из триггеров - и то же в orm_interface.remove для триггера delete_history
-#	warn "Called save($schema, $tablename, $id, $user_id, $jsondata, $context)\n";
+	warn "Called save($schema, $tablename, $id, $user_id, $jsondata, $context) debug=$debug\n" if $debug;
 
 	my $id_is_defined = defined ($id) && ($id=~/^\-?\d+$/);
 	my $id_in_data = delete $jsondata->{id}; # так можно явно задать id для нового объекта
@@ -695,7 +695,7 @@ sub _save {
 # Разрешим висячие ссылки
 	foreach my $f (@fields) {
 		my $val = $data->{$f};
-		my $t   = $field_types_by_attr{$f} || die("Unknown field $f");
+		my $t   = $field_types_by_attr{$f} || next; # тут могут быть несуществующие поля, их может вырезать presave 
 		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat, $attnum) = @$t;
 		if($typcat eq 'N' && ($val=~/[^\-\d]/)) { 
 			if($val eq 'me') {
@@ -771,7 +771,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 			if($changes) {
 				my $add_data = $changes;
 				$data = Hash::Merge->new('RIGHT_PRECEDENT')->merge($data, $add_data);
-warn "Data=".Data::Dumper::Dumper($changes, $data);
+#warn "Data=".Data::Dumper::Dumper($changes, $data);
 			}
 		}
 	}
