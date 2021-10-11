@@ -851,7 +851,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 			}
 		} elsif ($type eq 'daterange' && ref($val) eq 'ARRAY') {
 			push @types, $type;
-			push @args, jsonarray2daterange($val);
+			push @args, array2daterange($val);
 		} elsif (($type =~ /^(tstz|date)range$/) && ref($val) eq 'HASH') {
 			my ($lower,$upper, $lok, $uok);
 			if (exists $val->{upper}) { $upper = $val->{upper}; $uok = 1; }
