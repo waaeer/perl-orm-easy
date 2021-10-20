@@ -258,6 +258,7 @@ sub _mget {
 		LEFT JOIN pg_class     sc ON s.confrelid = sc.oid
 		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
 		  AND a.attnum>0
+		  AND NOT a.attisdropped
 		  AND ($4 OR a.attname::text = ANY($3) )
 	!, [ 'text', 'text', 'text[]', 'bool'],
 	   [ $schema, $tablename, $fields, $take_all]
@@ -492,7 +493,7 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 					FROM pg_attribute a
 					JOIN pg_type t ON a.atttypid = t.oid
 					JOIN pg_namespace n ON n.oid = t.typnamespace
-					WHERE attrelid = c.id AND attnum > 0
+					WHERE attrelid = c.id AND attnum > 0 AND NOT a.attisdropped
 			) x) AS  fields
 		FROM orm.get_terminal_subclasses($1, $2) c
 	!, ['text', 'text'], [$schema, $tablename])->{rows};
@@ -617,6 +618,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		JOIN pg_type t ON a.atttypid = t.oid
 		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
 		  AND a.attnum>0
+		  AND NOT a.attisdropped
 		  AND t.typcategory = 'B'
 	!, [ 'text', 'text'],
 	   [ $schema, $tablename]
@@ -686,7 +688,8 @@ sub _save {
 			 WHERE t.oid=a.atttypid
 			)
 		FROM pg_attribute a
-		WHERE attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) AND attnum>0
+		WHERE attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1) 
+		  AND attnum>0 AND NOT a.attisdropped
 	!, ['text', 'text'], [$schema, $tablename]);
 
     my %field_types_by_attr = map { $_->{attname} => $_->{t} } @{ $field_types->{rows} };
@@ -708,7 +711,7 @@ sub _save {
 				WHERE c.contype = 'f' 
 				  AND c.conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
 				  AND c.conkey   = ARRAY[$3::smallint]
-				  AND EXISTS (SELECT * FROM pg_attribute WHERE attname = 'name' AND attrelid = c.confrelid)
+				  AND EXISTS (SELECT * FROM pg_attribute WHERE attname = 'name' AND attrelid = c.confrelid AND NOT a.attisdropped)
 				!, [ 'text', 'text', 'smallint'], [$schema, $tablename, int($attnum)]);
 #warn "Seek for reference [$schema, $tablename, int($attnum)]\n";
 			if($reference) { 
