@@ -460,6 +460,11 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
   foreach my $ord (@order_fields) {
 	if($field_types_by_attr{$ord->[0]}) { # это конкретный атрибут
 		push @{$q->{order} ||= []},  ::quote_ident($ord->[0]).$ord->[1];
+	} elsif($ord->[0] eq '_specified') {
+		my $bb = $#{$q->{bind}} + 2;
+		push @{$q->{order} ||= []}, sprintf('array_position($%d, m.id)', $bb);
+		push @{$q->{types}}, 'idtype[]';
+		push @{$q->{bind}}, ref($query->{id}) ? $query->{id} : [$query->{id}];
 	} else {
 #		warn Data::Dumper::Dumper(\%field_types_by_attr);
 		die("Unknown order expression '$ord->[0]'");
@@ -711,7 +716,7 @@ sub _save {
 				WHERE c.contype = 'f' 
 				  AND c.conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
 				  AND c.conkey   = ARRAY[$3::smallint]
-				  AND EXISTS (SELECT * FROM pg_attribute WHERE attname = 'name' AND attrelid = c.confrelid AND NOT a.attisdropped)
+				  AND EXISTS (SELECT * FROM pg_attribute a WHERE attname = 'name' AND attrelid = c.confrelid AND NOT a.attisdropped)
 				!, [ 'text', 'text', 'smallint'], [$schema, $tablename, int($attnum)]);
 #warn "Seek for reference [$schema, $tablename, int($attnum)]\n";
 			if($reference) { 
