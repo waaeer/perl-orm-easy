@@ -11,7 +11,9 @@ use Carp;
 use locale;
 
 
-require "utf8_heavy.pl";
+eval {
+	require "utf8_heavy.pl";  ## removed in recent perl versions
+};
 my $log_mode = 0;
 our %tmp_cache;
 

@@ -14,6 +14,9 @@ CREATE OPERATOR && (
     RESTRICT = _int_overlap_sel,
     JOIN = _int_overlap_joinsel
 );
+DO LANGUAGE plpgsql $$
+BEGIN
+IF regexp_replace(version(), '^.*?(\d+).*$', '\1') < 14::text THEN
 CREATE OPERATOR CLASS gist__idtypebig_ops FOR TYPE idtype[] USING gist AS
     OPERATOR    3   && ,
     OPERATOR    6   =  (anyarray, anyarray),
@@ -30,4 +33,24 @@ CREATE OPERATOR CLASS gist__idtypebig_ops FOR TYPE idtype[] USING gist AS
     FUNCTION    6   g_intbig_picksplit (internal, internal),
     FUNCTION    7   g_intbig_same (intbig_gkey, intbig_gkey, internal),
     STORAGE     intbig_gkey;
+ELSE 
+CREATE OPERATOR CLASS gist__idtypebig_ops FOR TYPE idtype[] USING gist AS
+    OPERATOR    3   && ,
+    OPERATOR    6   =  (anyarray, anyarray),
+    OPERATOR    7   @> (_int4,_int4) ,
+    OPERATOR    8   <@ (_int4,_int4),
+    OPERATOR    20  @@ (_int4, query_int),
+    FUNCTION    1   g_intbig_consistent (internal, _int4, smallint, oid, internal),
+    FUNCTION    2   g_intbig_union (internal, internal),
+    FUNCTION    3   g_intbig_compress (internal),
+    FUNCTION    4   g_intbig_decompress (internal),
+    FUNCTION    5   g_intbig_penalty (internal, internal, internal),
+    FUNCTION    6   g_intbig_picksplit (internal, internal),
+    FUNCTION    7   g_intbig_same (intbig_gkey, intbig_gkey, internal),
+    STORAGE     intbig_gkey;
 
+
+END IF;
+
+END;
+$$;
