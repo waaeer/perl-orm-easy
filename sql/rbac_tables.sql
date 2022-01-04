@@ -35,7 +35,7 @@ CREATE TABLE auth.user_roles (
 	role   idtype NOT NULL REFERENCES auth.role(id),
 	ctime      TIMESTAMPTZ NOT NULL DEFAULT now(),
 	mtime	   TIMESTAMPTZ NOT NULL DEFAULT now(),
-	exires     TIMESTAMPTZ,
+	expires    TIMESTAMPTZ,
 	created_by  idtype,
 	changed_by  idtype,
 
