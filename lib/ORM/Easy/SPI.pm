@@ -956,12 +956,10 @@ sub _delete {
 	foreach my $o ( @{ $superclasses->{rows} }) {
 		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "predelete_$o->{tablename}"] )->{rows};
-#		warn "try pre $o->{schema} $o->{tablename}\n";
-		if(@$func) {
-			$old_data ||= ORM::Easy::SPI::to_json(
-				ORM::Easy::SPI::spi_run_query('SELECT * FROM '.::quote_ident($schema).'.'.::quote_ident($tablename).' WHERE id = $1', ['idtype' ], [$id])->{rows}->[0]
-			);
 
+		$old_data ||= ORM::Easy::SPI::spi_run_query('SELECT * FROM '.::quote_ident($schema).'.'.::quote_ident($tablename).' WHERE id = $1', ['idtype' ], [$id])->{rows}->[0];
+
+		if(@$func) {
 #			warn "call $o->{schema}.predelete_$o->{tablename}\n";
 			my $changes = ORM::Easy::SPI::spi_run_query('select '.::quote_ident($o->{schema}).'.'.::quote_ident("predelete_$o->{tablename}").'($1, $2, $3, $4, $5) AS x',
 				[ 'idtype', 'idtype', 'jsonb' , 'text', 'text', ],
