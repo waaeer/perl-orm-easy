@@ -258,6 +258,7 @@ sub _mget {
 		LEFT JOIN pg_constraint s ON s.conrelid = a.attrelid AND a.attnum = s.conkey[1] AND s.contype = 'f'
 		LEFT JOIN pg_class     sc ON s.confrelid = sc.oid
 		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
+          AND not a.attisdropped
 		  AND a.attnum>0
 		  AND NOT a.attisdropped
 		  AND ($4 OR a.attname::text = ANY($3) )
@@ -774,8 +775,13 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 		ORM::Easy::SPI::spi_run_query_bool('select '.::quote_ident($schema).'.'.::quote_ident("can_${op}_$tablename").'($1,$2,$3)', ['idtype', 'text', 'jsonb'], [$user_id, $id, $data])
 		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>1}));
 	} else {
-		ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id, $data])
-		or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
+        if ($op eq 'insert' && ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $1 AND s.nspname = $2)!, [ 'name', 'name' ], [ 'can_insert_object', 'orm' ])) {
+            ORM::Easy::SPI::spi_run_query_bool('select orm.can_insert_object($1,$2,$3)', ['idtype', 'text','text'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id])
+			or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
+        } else {
+			ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id, $data])
+			or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
+		}
 	}
 
 
