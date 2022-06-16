@@ -10,7 +10,6 @@ use List::Util;
 use Carp;
 use locale;
 
-
 eval {
 	require "utf8_heavy.pl";  ## removed in recent perl versions
 };
@@ -642,6 +641,33 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 	}
   }
 
+### While no transform for spoint:
+
+  my $spoint_fields = ORM::Easy::SPI::spi_run_query(q!
+		SELECT attname
+		FROM pg_attribute a
+		JOIN pg_type t ON a.atttypid = t.oid
+		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
+		  AND a.attnum>0
+		  AND NOT a.attisdropped
+		  AND t.typname = 'spoint'
+	!, [ 'text', 'text'],
+	   [ $schema, $tablename]
+	)->{rows};
+
+  if($spoint_fields && @$spoint_fields) {
+	foreach my $o (@{$ret{list}}) {
+		foreach my $f (@$spoint_fields) {
+			my $fn = $f->{attname};
+			if(defined $o->{$fn}) {
+				if($o->{$fn} =~ /\(\s*(\-?[\d\.]+)\s*,\s*(\-?[\d\.]+)\s*\)/) {
+					$o->{$fn} = { lat => $2*57.295779513, lng => $1*57.295779513 };
+				}
+			}
+		}
+	}
+  }
+
 ########## Smart postprocess-triggers for all superclasses (including this class)
 
   foreach my $o ( @{ $superclasses->{rows} }) {
@@ -739,8 +765,6 @@ sub _save {
 
 ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
 ## проверка прав делается перед presave, т.к. в presave уже могут быть сделаны изменения в БД, влияющие на права доступа
-
-
 
 warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
 #   toDo: scan superclasses
@@ -885,6 +909,15 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 		} elsif ($typtype eq 'e' && $val eq '') {
 			$exprs{$f} = 'NULL';
 			$n--; # does not push args			
+		} elsif ($type eq 'spoint') { # type from pg_sphere
+			if(ref($val) eq 'HASH') {
+				$exprs{$f} =  "spoint(0.017453292519*COALESCE(\$${n} ->>'lon',\$${n} ->>'lng')::float, 0.017453292519*(\$${n} ->>'lat')::float)";
+				push @types ,'jsonb';
+				push @args, $val;
+			} elsif(!$val) { 
+				$exprs{$f} = 'NULL';
+				$n--; # does not push args			
+			}
 		} else {
 			push @types, "$tschema.$type";
 			push @args,  $val;
