@@ -734,7 +734,7 @@ sub _save {
 		my $val = $data->{$f};
 		my $t   = $field_types_by_attr{$f} || next; # тут могут быть несуществующие поля, их может вырезать presave 
 		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat, $attnum) = @$t;
-		if($typcat eq 'N' && ($val=~/[^\-\d]/)) { 
+		if($typcat eq 'N' && ($val=~/[^\-\d\.]/)) { 
 			if($val eq 'me') {
 				$data->{$f} = $user_id;
 				next;
