@@ -2,9 +2,6 @@
 CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb 
 		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS $$
 	my ($o, $path, $v, $to_create) = @_;
-#	my $json = JSON::XS->new->allow_nonref;	
-#	$o &&= $json->decode(Encode::encode_utf8($o));
-#	$v &&= $json->decode(Encode::encode_utf8($v));
 	$path = $path->{array};
 	my $curr_o = \$o;
 	foreach my $x (@$path) { 
@@ -26,9 +23,7 @@ CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb,
 		}
 	}
 	${$curr_o} = $v;
-
 	return $o;
-#	return Encode::decode_utf8($json->encode($o));
 $$;
 
 
@@ -44,7 +39,6 @@ CREATE OR REPLACE FUNCTION orm.save_with_time() RETURNS TRIGGER LANGUAGE PLPGSQL
 $$;
 CREATE OR REPLACE FUNCTION orm.save_creator() RETURNS TRIGGER LANGUAGE PLPGSQL SECURITY DEFINER AS $$
     BEGIN
---		raise warning 'set created by in trigger from % to %', NEW.created_by ,NEW.changed_by;
 		NEW.created_by = NEW.changed_by;
 	    RETURN NEW; 
     END;

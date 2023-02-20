@@ -33,7 +33,7 @@ CREATE OR REPLACE FUNCTION auth.priv_object_id(name text, tablename text)
 			id idtype; sql text;
 	BEGIN
 		IF name ~ '^\d+$' THEN 
-			RETURN name::int;
+			RETURN name::idtype;
 		ELSIF name = '__all__' THEN
 			RETURN NULL;
 		ELSE 

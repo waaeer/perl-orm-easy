@@ -160,7 +160,6 @@ sub filter_bool {
 sub list2tree {
   my ($list, $convert, %opt) = @_;
   my $level = 0;
-  my %nodeById;
   my @top;
   my $pos = 0;
   my %nodeById =
@@ -352,6 +351,7 @@ sub _mget {
 
 	}
   }
+
 warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query->{__debug};
   foreach my $f (keys %$query) {
 	warn "f=$f t=$field_types_by_attr{$f} v=$query->{$f};\n" if $query->{__debug};
@@ -385,17 +385,17 @@ warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query
 				push @{$q->{types}}, 'text';
 				push @{$q->{bind}},  $vv;
 			}
-			elsif(my $vv = $v->{contains}) {
+			elsif($vv = $v->{contains}) {
 				push @{$q->{wheres}}, sprintf(q!m.%s ~*  $%d!, ::quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}}, 'text';
 				push @{$q->{bind}},  $vv;
 			}
-			elsif(my $vv = $v->{any}) {
+			elsif($vv = $v->{any}) {
 				push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', ::quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
 				push @{$q->{bind}},  $vv;
 			}
-			elsif(my $vv = $v->{contains_or_null}) {
+			elsif($vv = $v->{contains_or_null}) {
 				if($type->[3] eq 'A') { # for array data types
 					my $qn = ::quote_ident($f);
 					push @{$q->{wheres}}, sprintf('(m.%s && $%d OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
@@ -403,7 +403,7 @@ warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query
 					push @{$q->{bind}},  $vv;
 				}
 			}
-			elsif(my $vv = $v->{not}) {
+			elsif($vv = $v->{not}) {
 				if($type->[3] eq 'A') { # for array data types
 					my $qn = ::quote_ident($f);
 					push @{$q->{wheres}}, sprintf('(NOT (m.%s && $%d) OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
@@ -474,7 +474,7 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
   }
   if($query->{with_can_update}) {
 	my $bb = $#{$q->{bind}} + 2;
-	push @{$q->{outer_select}}, sprintf(q!$%d.can_update_$%d($%d, m.id::text, '{}'::jsonb) AS can_edit!, $bb,$bb+1,$bb+2); #.
+	push @{$q->{outer_select}}, sprintf(q!$%d.can_update_$%d($%d, m.id::text, NULL) AS can_update!, $bb,$bb+1,$bb+2); #.
 	push @{$q->{types}}, 'text','text', 'idtype';
 	push @{$q->{bind}}, ::quote_ident($schema), ::quote_ident($tablename), $user_id;
   }
@@ -482,7 +482,7 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
   if(my $s=$query->{with_permissions}) {
 	my $bb = $#{$q->{bind}} + 2;
 	push @{$q->{outer_select}}, sprintf(q!
-		 orm.can_update_object($%d, $%d, m.id::text, NULL) as can_edit,
+		 orm.can_update_object($%d, $%d, m.id::text, NULL) as can_update,
 		 orm.can_delete_object($%d, $%d, m.id::text) as can_delete
 	!, $bb, $bb+1, $bb, $bb+1 );  #.
 	push @{$q->{types}}, 'idtype', 'text';
@@ -668,6 +668,13 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		}
 	}
   }
+  if($query->{with_can_update} || $query->{with_permissions}) { # ensure compatibility
+	foreach my $o (@{$ret{list}}) {
+		$o->{can_edit} = $o->{can_update};
+	}
+  }
+
+
 
 ########## Smart postprocess-triggers for all superclasses (including this class)
 
@@ -780,7 +787,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 			or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
         } else {
 			ORM::Easy::SPI::spi_run_query_bool('select orm.can_update_object($1,$2,$3,$4)', ['idtype', 'text','text','jsonb'], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename), $id, $data])
-			or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>2}));
+			or die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename", id=>$id, action=>$op, reason=>3}));
 		}
 	}
 
@@ -868,7 +875,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 				push @args,  [ map { !defined($_) || $_ eq '' ? undef : ORM::Easy::SPI::make_new_id($_, $context, \%ids) } (ref($v) eq 'ARRAY' ? @$v : ($v))];
 				$expr_add  =  "+\$${n}::$type";
 			}
-			elsif(my $v = $val->{delete}) {
+			elsif($v = $val->{delete}) {
 				my $vtype = ref($v) eq 'ARRAY' ? $type : substr($type,1); # remove leading underscore from type name
 				push @types, $type;
 				push @args,  [ map { !defined($_) || $_ eq '' ? undef : ORM::Easy::SPI::make_new_id($_, $context, \%ids) } (ref($v) eq 'ARRAY' ? @$v : ($v))];

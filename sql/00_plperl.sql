@@ -1,2 +1,4 @@
 CREATE EXTENSION plperl;
 CREATE EXTENSION jsonb_plperl;
+CREATE EXTENSION bool_plperl;
+
