@@ -703,7 +703,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 ############################################## SAVE ###################################
 
 sub _save {
- my ($schema, $tablename, $id, $user_id, $jsondata, $context) = @_;
+    my ($schema, $tablename, $id, $user_id, $jsondata, $context) = @_;
 	my $debug = 0;
 # todo: засунуть user_id в сессионный контекст, чтобы подхватить его из триггеров - и то же в orm_interface.remove для триггера delete_history
 	warn "Called save($schema, $tablename, $id, $user_id, $jsondata, $context) debug=$debug\n" if $debug;
@@ -838,13 +838,9 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 		my $t   = $field_types_by_attr{$f};
 #warn "Process $f $val\n";
 		if(!$t) {
-			if(!defined($val)) {
-				# в несуществующее поле разрешаем писать только NULL. Это нужно, чтобы в presave обрабатывать дополнительные "виртуальные" поля и птом их занулять
-				delete $data->{$f};
-				next;
-			}
-			die("No such field $f; fields are ".join(',', sort keys %field_types_by_attr));
+			next; # Skip fields which are not present in the table for processing at the postsave stage.
 		}
+
 		push @fields_ok, $f;
 		my ($tschema, $type, $typtype, $typcat, $eltype, $eltypecat) = @$t;
 		$n++;

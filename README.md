@@ -5,7 +5,7 @@ In-database ORM for PostgreSQL
 ## The model
 
 A database table is considered as a repository of objects of a single class. The classes can be inherited according to PostgreSQL object-relational approach.
-Below "class" and "table" are synonyms, superclasses and subclasses are defined by means of PostgreSQL table inheritance.
+Below "class" and "table" are synonyms, superclasses and subclasses are defined in terms of PostgreSQL table inheritance.
 
 Each table has an `id` field of `idtype` type which is its primary key. The `idtype` type can be mapped to `int4`, `int8` (todo) or `uuid` (todo) database-wide.
 
@@ -69,7 +69,8 @@ a reference to some of the database objects. If a parameters has a NULL value, i
 A role with parameters is below referred to as a "parametric role".
 
 The role definition specifies the classes of the objects the role can be bound to.
-Real world examples:
+
+*Example:*
 
 | Role                              | Number of parameters | Object classes    | Comment                                                                                                                                 |
 | --------------------------------- | -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -91,7 +92,7 @@ Examples of parametric privileges:
 
 A role is a set of privileges, in which the parameter values can have specified values, or be mapped to the role parameters.
 
-Example (Role: Account manager for customer X):
+*Example* (Role: Account manager for customer X):
 
 | Privilege                                               | Parameters                 | Comment                                                                                                  |
 | ------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -170,27 +171,27 @@ The SQL query is formed due to content of the `query` parameter, which is a JSON
 
 For the query options with names equal to names of table fields, filtering by field values is performed, the exact form of SQL `WHERE` clause depends on the field type and value type, as specified in the following table:
 
-| Field type        | Option value                | SQL fragment                              |
-| ----------------- | --------------------------- | ----------------------------------------- |
-| `date`            | `[d1,d2]`                   | `field >= d1 AND field < d2`              |
-|                   | `[d1, null]`                | `field >= d1`                             |
-|                   | `[null, d2]`                | `field < d2`                              |
-| array             | `[.....]`                   | `field && value`                          |
-|                   | `{ contains_or_null: arr }` | `field && arr OR field IS NULL`           |
-|                   | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
-|                   | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
-|                   | `NULL`                      | `field IS NULL`
-| scalar types      | `[.....]`                   | `field = ANY(value)`                      |
-|                   | `scalar_value`              | `field = scalar_value`                    |
-|                   | `{ any: v }`                | `field = ANY(v)`                          |
-|                   | `{ not: array }`            | `NOT (field = ANY(array))`                |
-|                   | `{ not_null: true }`        | `field IS NOT NULL`                       | 
-| `text`            | `{ begins: str }`           | `field ~* '^value'`                       |
-|                   | `{ contains: str }`         | `field ~* value`                          |
-| numeric types     | `non_numeric_value`         | If the field references another table, resolve it by name: `field = (SELECT id FROM ref.table WHERE name = non_numeric_value` |
-| `bool`            | `true`                      | `field`                                   |
-|                   | `false`                     | `NOT field`                               |
-|                   | `NULL`                      | `field IS NULL`                           |
+| Field type              | Option value                | SQL fragment                              |
+| ----------------------- | --------------------------- | ----------------------------------------- |
+| numeric types           | `non_numeric_value`         | If the field references another table, resolve it by name: `field = (SELECT id FROM ref.table WHERE name = non_numeric_value` |
+| `bool`                  | `true`                      | `field`                                   |
+|                         | `false`                     | `NOT field`                               |
+|                         | `NULL`                      | `field IS NULL`                           |
+| `text`                  | `{ begins: str }`           | `field ~* '^value'`                       |
+|                         | `{ contains: str }`         | `field ~* value`                          |
+| `date`, `timestamp` etc | `[d1,d2]`                   | `field >= d1 AND field < d2`              |
+|                         | `[d1, null]`                | `field >= d1`                             |
+|                         | `[null, d2]`                | `field < d2`                              |
+| scalar types            | `[.....]`                   | `field = ANY(value)`                      |
+|                         | `scalar_value`              | `field = scalar_value`                    |
+|                         | `{ any: v }`                | `field = ANY(v)`                          |
+|                         | `{ not: array }`            | `NOT (field = ANY(array))`                |
+|                         | `{ not_null: true }`        | `field IS NOT NULL`                       | 
+| array                   | `[.....]`                   | `field && value`                          |
+|                         | `{ contains_or_null: arr }` | `field && arr OR field IS NULL`           |
+|                         | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
+|                         | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
+|                         | `NULL`                      | `field IS NULL`
 
 
 Filters on several fields are joined with `AND`.
@@ -254,9 +255,9 @@ The `internal_data` structure has the following fields:
 
 The main table in the query has an `m` alias.
 
-Example of function adding text search capability to `crm.person` table (supposing it has a `ts_vector` field).
+*Example* of a function adding full text search function for a `cms.news` table (supposing it has a `ts_vector` field).
 
-    CREATE FUNCTION crm.query_person (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$
+    CREATE FUNCTION cms.query_news (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$
 	DEFINE n int;
     BEGIN
       IF query ? 'search' THEN 
@@ -268,6 +269,8 @@ Example of function adding text search capability to `crm.person` table (supposi
       RETURN internal_data;
     END;
     $$;
+
+	SELECT auth_interface.tsearch('cms', 'news', 131, 1, 20, '{"status" : "published", "search": "Metanoia"}');
 
 
 #### postquery_<tablename> functions
