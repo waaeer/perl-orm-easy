@@ -48,7 +48,16 @@ CREATE OPERATOR CLASS gist__idtypebig_ops FOR TYPE idtype[] USING gist AS
     FUNCTION    6   g_intbig_picksplit (internal, internal),
     FUNCTION    7   g_intbig_same (intbig_gkey, intbig_gkey, internal),
     STORAGE     intbig_gkey;
-
+CREATE OPERATOR CLASS gin__idtype_ops FOR TYPE idtype[] USING gin AS
+	OPERATOR	3	&&,
+	OPERATOR	6	= (anyarray, anyarray),
+	OPERATOR	8	<@,
+	OPERATOR	20	@@ (_int4, query_int),
+	FUNCTION	1	btint4cmp (int4, int4),
+	FUNCTION	2	ginarrayextract (anyarray, internal, internal),
+	FUNCTION	3	ginint4_queryextract (_int4, internal, int2, internal, internal, internal, internal),
+	FUNCTION	4	ginint4_consistent (internal, int2, _int4, int4, internal, internal, internal, internal),
+	STORAGE		int4;
 
 END IF;
 
