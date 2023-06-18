@@ -206,24 +206,13 @@ sub list2plaintree {
   return \@plain;
 }
 
-############################################## MGET ###################################
-sub _mget {
-  my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
-  my $table = ::quote_ident($schema).'.'.::quote_ident($tablename);
-
-  %ORM::Easy::SPI::tmp_cache = ();
-
-  # контроль доступа. В перспективе - более гранулярный
-  my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, $table ]);
-  if(!$can_see) {
-		die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename",  action=>'view', reason=>0}));
-  }
-  $page ||= 1;
-
-  my $offset = $pagesize ? ($page-1)*$pagesize : undef;
-	
-  my $q = {wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[], group=>[], aggr=>[]};
-
+############################################# Supplementary function for mget #############
+sub generate_query_parts {
+  my ($schema, $tablename, $user_id, $query) = @_;
+  my $q = {
+	table=>::quote_ident($schema).'.'.::quote_ident($tablename),
+	wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[], group=>[], aggr=>[]
+  };
 # простые поля
 #  ...
   my @order_fields;
@@ -303,9 +292,9 @@ sub _mget {
 
 
 # smart pre-triggers for all superclasses
-  my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
+  my $superclasses = $q->{superclasses} = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename])->{rows};
 
-  foreach my $o ( @{ $superclasses->{rows} }) {
+  foreach my $o ( @$superclasses) {
 	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "query_$o->{tablename}"] )->{rows};
 #		warn "try query $o->{schema} $o->{tablename}\n";
@@ -528,10 +517,29 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 	}
 #warn "subclasses=".Data::Dumper::Dumper($subclasses);
 	if(!@$subclasses) {
-		die("Class $table has no subclasses");
+		die("Class $schema.$tablename has no subclasses");
 	}
-	$table = '('. join(' UNION ALL ', map { "SELECT $_->{all_fields},".::quote_literal($_->{classname})." AS __class FROM $_->{tablename}" } @$subclasses ). ') ';
+	$q->{table} = '('. join(' UNION ALL ', map { "SELECT $_->{all_fields},".::quote_literal($_->{classname})." AS __class FROM $_->{tablename}" } @$subclasses ). ') ';
   }
+  return $q;
+}
+
+############################################## MGET ###################################
+sub _mget {
+  my ($schema, $tablename, $user_id, $page, $pagesize, $query) = @_;
+  %ORM::Easy::SPI::tmp_cache = ();
+
+  # контроль доступа. В перспективе - более гранулярный
+  my $can_see = ORM::Easy::SPI::spi_run_query_bool('select orm.can_view_objects($1,$2)', ['idtype' , 'text' ], [$user_id, ::quote_ident($schema).'.'.::quote_ident($tablename) ]);
+  if(!$can_see) {
+		die("ORM: ".ORM::Easy::SPI::to_json({error=> "AccessDenied", user=>$user_id, class=>"$schema.$tablename",  action=>'view', reason=>0}));
+  }
+  $page ||= 1;
+ 
+  my $q =  generate_query_parts($schema, $tablename, $user_id, $query);
+  
+  my $table = $q->{table};
+  my $offset = $pagesize ? ($page-1)*$pagesize : undef;
 
   my $where     = @{$q->{wheres}} ? 'WHERE '.join(' AND ', map {"($_)" } @{$q->{wheres}}) : '';
   my $order     = @{$q->{order}}     ? 'ORDER BY '.join(', ', @{$q->{order}}) : '';
@@ -586,7 +594,8 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 
 	my $child_where  = ($where ? "$where AND " : "WHERE "). 'm.parent = __tree.id';
 	my $rwith = $with  ? " $with," : '';
-	$sql = "WITH $rwith RECURSIVE __tree AS (
+
+	$sql = "WITH RECURSIVE $rwith  __tree AS (
 	                                SELECT $sel $top_sel FROM $table m $join  $top_where
 					UNION ALL
 	                                SELECT $sel $node_sel FROM $table m $join, __tree $child_where
@@ -678,7 +687,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 
 ########## Smart postprocess-triggers for all superclasses (including this class)
 
-  foreach my $o ( @{ $superclasses->{rows} }) {
+  foreach my $o ( @{ $q->{superclasses} }) {
 	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "postquery_$o->{tablename}"] )->{rows};
 #		warn "try postquery $o->{schema} $o->{tablename}\n";
