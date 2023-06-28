@@ -1035,6 +1035,7 @@ sub _delete {
 #		warn "try post $o->{schema} $o->{tablename}\n";
 		if(@$func) {
 #			warn "call $o->{schema}.postdelete_$o->{tablename}\n";
+			$old_data ||= ORM::Easy::SPI::spi_run_query('SELECT * FROM '.::quote_ident($schema).'.'.::quote_ident($tablename).' WHERE id = $1', ['idtype' ], [$id])->{rows}->[0];
 			ORM::Easy::SPI::spi_run_query('select '.::quote_ident($o->{schema}).'.'.::quote_ident("postdelete_$o->{tablename}").'($1, $2, $3, $4, $5) AS x',
 				[ 'idtype', 'idtype',  'jsonb', 'text', 'text', ],
 				[ $user_id, $id, $old_data, $schema, $tablename ]
