@@ -810,7 +810,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 	foreach my $o ( @{ $superclasses->{rows} }) {
 		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "presave_$o->{tablename}"] )->{rows};
-#		warn "try pre $o->{schema} $o->{tablename}\n";
+		warn "try pre $o->{schema} $o->{tablename} $#$func\n" if $debug;
 		if(@$func) {
 			$old_data ||=
 				$op eq 'update'
@@ -823,11 +823,11 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 				[ 'idtype', 'idtype', 'text', 'jsonb','jsonb' , 'text', 'text', ],
 				[ $user_id, $id, $op, $old_data, $jsondata, $schema, $tablename ]
 			);
-#			warn "done $o->{schema}.presave_$o->{tablename}\n";
+			warn "done $o->{schema}.presave_$o->{tablename}\n" if $debug;
 			if($changes) {
 				my $add_data = $changes;
 				$data = Hash::Merge->new('RIGHT_PRECEDENT')->merge($data, $add_data);
-#warn "Data=".Data::Dumper::Dumper($changes, $data);
+				warn "Data=".Data::Dumper::Dumper($changes, $data) if $debug;
 			}
 		}
 	}
