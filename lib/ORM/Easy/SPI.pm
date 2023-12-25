@@ -462,10 +462,10 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 	}
   }
   if($query->{with_can_update}) {
-	my $bb = $#{$q->{bind}} + 2;
-	push @{$q->{outer_select}}, sprintf(q!$%d.can_update_$%d($%d, m.id::text, NULL) AS can_update!, $bb,$bb+1,$bb+2); #.
-	push @{$q->{types}}, 'text','text', 'idtype';
-	push @{$q->{bind}}, ::quote_ident($schema), ::quote_ident($tablename), $user_id;
+    my $bb = $#{$q->{bind}} + 2;
+    push @{$q->{outer_select}}, sprintf(q!%s.can_update_%s($%d, m.id::text, to_jsonb(m)) AS can_update!, ::quote_ident($schema), ::quote_ident($tablename), $bb); #.
+    push @{$q->{types}}, 'idtype';
+    push @{$q->{bind}}, $user_id;
   }
 
   if(my $s=$query->{with_permissions}) {
