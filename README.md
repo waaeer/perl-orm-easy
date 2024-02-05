@@ -245,6 +245,8 @@ Such function should be defined as
 The function accepts the current `internal_data` structure, modifies it and returns the new value. This structure represents the current state of the query preparation.
 `query` is the parameter of mget which is translated to the query function.
 
+Postquery functions for superclasses are called after postquery function for the current class.
+
 The `internal_data` structure has the following fields: 
 
 * wheres -- array of where quals to be joined with `AND`
@@ -275,9 +277,24 @@ The main table in the query has an `m` alias.
 
 #### postquery_<tablename> functions
 
+User-defined Postquery functions can be used to post-process query results. 
+Such function should be defined as 
+
+    schema.postquery_<table_name> (user_id idtype, result jsonb, query jsonb) RETURNS jsonb
+
+Postquery functions for superclasses are called after postquery function for the current class. 
+
+The `user_id` and `query` parameters are same as for the parent `mget` function; `result` is the array of objects to be returned by `mget`.
+The return value of a postquery function should be the modified array of objects or NULL if no modifications are required.
+
 ## save
 
-If new objects come without identifiers, they are automatically numbered using `orm.id_seq` sequence.
+
+Saves an object into database (inserts a new object or updates an existing one)
+
+`orm_interface.save(schema text, tablename text, user_id idtype, id text, object jsonb, context jsonb) RETURNS jsonb`
+
+If a new object comes without identifier or with text pseudoidentifier (see below), it is automatically numbered using `orm.id_seq` sequence.
 
 ### Options
 
@@ -288,6 +305,11 @@ If new objects come without identifiers, they are automatically numbered using `
 #### postsave_<tablename> functions
 
 ## delete
+
+Deletes an object from database.
+
+`orm_interface.delete(schema text, tablename text, user_id idtype, id text, object jsonb, context jsonb) RETURNS jsonb`
+
 
 ### Options
 
@@ -303,7 +325,9 @@ If new objects come without identifiers, they are automatically numbered using `
 
 ## Transaction support
 
- 
+### Pseudoidentifiers
+
+
 
 ## File storage
 
