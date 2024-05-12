@@ -292,7 +292,7 @@ The return value of a postquery function should be the modified array of objects
 
 Saves an object into database (inserts a new object or updates an existing one)
 
-`orm_interface.save(schema text, tablename text, user_id idtype, id text, object jsonb, context jsonb) RETURNS jsonb`
+`orm_interface.save(schema text, tablename text, id text,  user_id idtype, object jsonb, context jsonb) RETURNS jsonb`
 
 If a new object comes without identifier or with text pseudoidentifier (see below), it is automatically numbered using `orm.id_seq` sequence.
 
@@ -308,7 +308,7 @@ If a new object comes without identifier or with text pseudoidentifier (see belo
 
 Deletes an object from database.
 
-`orm_interface.delete(schema text, tablename text, user_id idtype, id text, object jsonb, context jsonb) RETURNS jsonb`
+`orm_interface.delete(schema text, tablename text,  id text, user_id idtype, object jsonb, context jsonb) RETURNS jsonb`
 
 
 ### Options

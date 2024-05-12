@@ -45,5 +45,24 @@ CREATE OR REPLACE FUNCTION orm_interface.set_order (schema text, tablename text,
 	return $context;
 $perl$;
 
+CREATE OR REPLACE FUNCTION orm_interface.set_order_parent (schema text, tablename text, ids jsonb, field text, parent_field text, parent_id idtype, user_id idtype, context jsonb)  
+	RETURNS jsonb LANGUAGE PLPERL  TRANSFORM FOR TYPE jsonb  SECURITY DEFINER AS $perl$
+
+    my ($schema, $tablename, $ids, $fld, $parent_fld, $parent_id, $user_id, $context) = @_;
+#	warn "Called set_order_parent, ($schema, $tablename, [".($ids?join(',',@$ids):'NULL')."], $fld, $parent_fld, $parent_id, $user_id, $context)\n";
+	my $pos = 1;
+	$context = $context || {};
+	$fld ||= 'pos';
+
+	foreach my $id (@$ids) { 
+		$id = ORM::Easy::SPI::make_new_id($id, $context, {});
+		my $ret = ORM::Easy::SPI::spi_run_query_row('select * FROM orm_interface.save($1, $2, $3, $4, $5, $6)',
+				[ 'text', 'text', 'text', 'idtype', 'jsonb','jsonb' ],
+				[$schema, $tablename, $id, $user_id, {$fld => $pos++, $parent_fld => $parent_id }, $context ] 
+		);
+		$context = Hash::Merge->new('RIGHT_PRECEDENT')->merge($context, $ret->{b});
+	}
+	return $context;
+$perl$;
 
 
