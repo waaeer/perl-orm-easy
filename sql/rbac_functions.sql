@@ -119,10 +119,10 @@ CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id idtype, grantee_id id
 		END IF;
 		SELECT name INTO STRICT role_name FROM auth.role WHERE id = role_id;
 
-		INSERT INTO auth.user_roles ("user", created_by, role,  objects, expires) VALUES (grantee_id, user_id, role_id,  objects_, expires_)
+		INSERT INTO auth.user_roles ("user", created_by, changed_by, role,  objects, expires) VALUES (grantee_id, user_id, user_id, role_id,  objects_, expires_)
 				 RETURNING id INTO inserted_id;
 		IF inserted_id IS NOT NULL THEN 
-			RAISE NOTICE 'inserted user_roles %; check permission', inserted_id;
+			RAISE NOTICE 'inserted user_roles % by %; check permission', inserted_id, user_id;
 			role_checker = 'can_add_role_' || role_name;
 			EXECUTE 'select auth.' || quote_ident(role_checker) || '($1, $2, $3)' INTO can_do USING user_id, grantee_id, objects_;
 			IF NOT can_do THEN 
