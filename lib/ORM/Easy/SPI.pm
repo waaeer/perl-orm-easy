@@ -725,8 +725,6 @@ sub _save {
     my $data = $jsondata;
 
 ### мы должны сходить за атрибутами до проверки доступа, чтобы разрешить висячие ссылки
-
-
     my $field_types = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname,
 			(SELECT ARRAY[(select nspname from pg_namespace n where n.oid = t.typnamespace)::text,
@@ -763,9 +761,7 @@ sub _save {
 				  AND c.conkey   = ARRAY[$3::smallint]
 				  AND EXISTS (SELECT * FROM pg_attribute a WHERE attname = 'name' AND attrelid = c.confrelid AND NOT a.attisdropped)
 				!, [ 'text', 'text', 'smallint'], [$schema, $tablename, int($attnum)]);
-#warn "Seek for reference [$schema, $tablename, int($attnum)]\n";
 			if($reference) { 
-#warn "Reference is $reference->{nspname}.$reference->{relname} [$val]\n";
 				my $obj = ORM::Easy::SPI::spi_run_query_row(q!SELECT id FROM !.::quote_ident($reference->{nspname}).'.'.::quote_ident($reference->{relname}).q!
 					WHERE name = $1
 				!, ['text'], [$val]);
@@ -783,7 +779,7 @@ sub _save {
 ## права на каждую таблицу определяются отдельной функцией (user_id,id,data)
 ## проверка прав делается перед presave, т.к. в presave уже могут быть сделаны изменения в БД, влияющие на права доступа
 
-warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
+	warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция есть, вызываем её; если нет - игнорируем (правильно ли это?)
 #   toDo: scan superclasses
 
     if( ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
@@ -806,18 +802,23 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 # smart pre-triggers for all superclasses
 	my $superclasses = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.get_inheritance_tree($1, $2) !, ['text', 'text'], [$schema, $tablename]);
 	my $old_data;
-
+	my %postfuncs;
 	foreach my $o ( @{ $superclasses->{rows} }) {
-		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
+		my $func     = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "presave_$o->{tablename}"] )->{rows};
+		my $postfunc = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
+			[ 'name', 'name'], [ $o->{schema}, "postsave_$o->{tablename}"] )->{rows};
+		$o->{post} = $postfunc;
+	
 		warn "try pre $o->{schema} $o->{tablename} $#$func\n" if $debug;
-		if(@$func) {
+		if(@$func || @$postfunc) {
 			$old_data ||=
 				$op eq 'update'
 				? ORM::Easy::SPI::spi_run_query_row('SELECT * FROM '.::quote_ident($schema).'.'.::quote_ident($tablename).' WHERE id = $1', ['idtype' ], [$id])
 				: {}
 			;
-
+		}
+		if(@$func) {
 			warn "call $o->{schema}.presave_$o->{tablename}\n" if $debug;
 			my $changes = ORM::Easy::SPI::spi_run_query_expr(::quote_ident($o->{schema}).'.'.::quote_ident("presave_$o->{tablename}").'($1, $2, $3, $4, $5, $6, $7)',
 				[ 'idtype', 'idtype', 'text', 'jsonb','jsonb' , 'text', 'text', ],
@@ -860,12 +861,6 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 			}
 			push @types, $type;
 			push @args,  defined($val) ? "\\x$val" : undef;
-
-#       Already done before
-#		} elsif ($typcat eq 'N') {
-#			push @types, $type;
-#			push @args, !defined($val) || $val eq '' ? undef : ($data->{$f}=ORM::Easy::SPI::make_new_id($val, $context, \%ids));
-#
 		} elsif($type eq 'bool') {
             $exprs{$f} = defined $val ? ( $val ? 'true' : 'false' )  : 'NULL';
 			$n--;  # does not push args
@@ -962,8 +957,7 @@ warn "try $schema.can_${op}_$tablename\n" if $debug;   # если функция
 	if($op eq 'insert' && $context) { ($context->{_created_ids} ||= {})->{$id} = 1; } 
 
 	foreach my $o ( @{ $superclasses->{rows} }) {
-		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
-			[ 'name', 'name'], [ $o->{schema}, "postsave_$o->{tablename}"] )->{rows};
+		my $func = $o->{post};
 		warn "try post $o->{schema} $o->{tablename}\n" if $debug;
 		if(@$func) {
 			warn "call $o->{schema}.postsave_$o->{tablename}\n" if $debug;
@@ -1044,7 +1038,7 @@ sub _delete {
 		}
 	}
 
-    return {ok=>1};
+    return $context;
 }
 
 

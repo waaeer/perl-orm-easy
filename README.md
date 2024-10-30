@@ -9,11 +9,17 @@ Below "class" and "table" are synonyms, superclasses and subclasses are defined 
 
 Each table has an `id` field of `idtype` type which is its primary key. The `idtype` type can be mapped to `int4`, `int8` (todo) or `uuid` (todo) database-wide.
 
-This library provides easy object-level API to the database, consisting of the following functions:
+This library provides easy object-level API to the database, with the following main functions:
 
-- mget   (similar to SQL `SELECT`; returns an object list or a single object in a corner case)
-- save   (similar to SQL `INSERT` or `UPDATE`; saves a new or existing object to the database)
-- delete (similar to SQL `DELETE`; deletes an object)
+- `mget`   (similar to SQL `SELECT`; returns an object list or a single object in a corner case)
+- `save`   (similar to SQL `INSERT` or `UPDATE`; saves one new or existing object to the database)
+- `delete` (similar to SQL `DELETE`; deletes one object)
+
+and some additional ones:
+
+- `msave` (similar to SQL `UPDATE` for multiple rows)
+- `set_order` (numerate a set of objects in a given order)
+- `set_order_parent` (same as `set_order` and also sets a `parent` field - useful for moving nodes in trees)
 
 ### Multiuser work
 
@@ -46,18 +52,19 @@ or
 
 ### Table identification
 
-To reference a table, in some cases an `idtype` identifier is preferable over its symbolic name. PostgreSQL OIDs are not a solution for this because of they change
-if the table (or the whole database) is deleted and recreated. So, orm-easy defines an orm.metadata table with the following fields:
+Sometimes we want to reference database tables in the same way as table rows. To make it possible, orm-easy keeps a mapping from `idtype` identifiers to the symbolic names of the tables in a separate `orm.metadata` table.
+PostgreSQL OIDs are not a solution for this because they are changed if the table (or the whole database) is deleted and recreated (or logically replicated, or dumped and reloaded). 
+`orm.metadata` table has the following fields:
 
-| Field           | Type   | Description                                                                                                                                        |
-| --------------- | ------ |--------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id              | idtype | The identifier                                                                                                                                     |
-| name            | text   | Full name of the table (with schema)                                                                                                               |
-| public_readable | bool   | Not null default false. If true, read privilege (see below) is not checked by `mget`. It may mean that access is checked in ABAC-style (see below) |
+| Field             | Type   | Description                                                                                                                                            |
+| ----------------- | ------ |------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | idtype | The identifier                                                                                                                                         |
+| `name`            | text   | Full name of the table (with schema)                                                                                                                   |
+| `public_readable` | bool   | Not null default false. If true, the read privilege (see below) is not checked by `mget`. It may mean that access is checked in ABAC-style (see below) |
 
 ### Access control; RBAC
 
-orm-easy allows use a parametric role based access control model (RBAC) to manage user access to different operations in the database. 
+orm-easy uses a parametric role-based access control model (RBAC) to manage user access to different operations in the database. 
 Also, elements of attribute-based access control (ABAC) can be easily implemented with `mget` extensions, see below.
 
 RBAC means that users are granted with roles, each of them being a set of privileges. 
@@ -68,19 +75,19 @@ With parametric RBAC, any user can be assigned a set of roles, each with optiona
 a reference to some of the database objects. If a parameters has a NULL value, it means that the role is granted for all such objects. 
 A role with parameters is below referred to as a "parametric role".
 
-The role definition specifies the classes of the objects the role can be bound to.
+The role definition specifies the classes of objects the role can be bound to.
 
 *Example:*
 
-| Role                              | Number of parameters | Object classes    | Comment                                                                                                                                 |
-| --------------------------------- | -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| System administrator              | 0                    | None              | A classic non-parametric role                                                                                                        |
-| Account manager of customer X     | 1                    | Customer          | A role is expected to be granted in relation to some definite Customer. A person managing 2 customers will be given this role twice. |
-| Expert on topic X in department Y | 2                    | Topic, Department | A person performing work on something (X) in department (Y).                                                                         |
+| Role                              | Number of parameters | Object classes    | Comment                                                                                                                                |
+| --------------------------------- | -------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| System administrator              | 0                    | None              | A classic non-parametric role                                                                                                          |
+| Account manager of customer X     | 1                    | Customer          | A role is expected to be granted in relation to some definite Customer. A person managing 2 customers will be granted this role twice. |
+| Expert on topic X in department Y | 2                    | Topic, Department | A person allowed to perform work on something (X) in department (Y).                                                                   |
 
-When a parametric role is granted to some user, the values of all parameters should be specified, possibly as NULLs.
+When a parametric role is granted to some user, the values of all parameters should be specified, possibly as NULLs (which means 'all objects').
 
-A parametric role is a set of privileges, which also can be parametric (or even should be parametric, because the role parameters are mapped to the privilege parameters).
+A parametric role is a set of privileges, some of them also can be parametric (or even should be parametric, because the role parameters should be mapped to the privilege parameters).
 
 Examples of parametric privileges:
 
@@ -88,24 +95,24 @@ Examples of parametric privileges:
 | ------------------------------------------------------- | -------------------- | --------------------------- | ------------------------------------------------ |
 | Change user passwords                                   | 0                    | None                        | A classic non-parametric privilege               |
 | Edit members of deparment X                             | 1                    | Department                  | So obvious, how to comment ?                     |
-| Perform a workflow transition Y on issues of customer X | 2                    | Article category, Operation | E.g. in a service-desk like or other BPMS system |
+| Perform a workflow transition Y on issues of customer X | 2                    | Article category, Operation | E.g. in a service-desk or other BPMS system      |
 
 A role is a set of privileges, in which the parameter values can have specified values, or be mapped to the role parameters.
 
 *Example* (Role: Account manager for customer X):
 
-| Privilege                                               | Parameters                 | Comment                                                                                                  |
-| ------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Access to CRM application                               | None                       | All account managers use CRM system                                                                      |
-| See customer X contacts                                 | X=role.X                   | Parameter is mapped from the role to the privilege                                                       | 
-| Perform a workflow transition Y on issues of customer X | X=role X, Y="new=>work"    | One parameter is mapped from the role, other has a fixed value (bound to a specific workflow transition) |
-| Perform a workflow transition Y on issues of customer X | X=role X, Y="work=>closed" | Another transition is also allowed for the account manager                                               |
+| Privilege                                               | Parameters                 | Comment                                                                                                            |
+| ------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Access to CRM application                               | None                       | All account managers use CRM system                                                                                |
+| See customer X contacts                                 | X=role.X                   | Parameter is mapped from the role to the privilege                                                                 | 
+| Perform a workflow transition Y on issues of customer X | X=role.X, Y="new=>work"    | One parameter is mapped from the role parameter, other has a fixed value (bound to a specific workflow transition) |
+| Perform a workflow transition Y on issues of customer X | X=role.X, Y="work=>closed" | Another transition is allowed to the account manager in similar manner                                             |
 
 The parametric RBAC system is managed by the following functions:
 
 #### `auth_interface.check_privilege(user_id idtype, privilege_name text, object_ids text[] = NULL) RETURNS bool`
 
-Checks if user has this privilege for the specified set of parameters. Note that they are not `idtype[]`, but `text[]`. Each value of `object_ids` can be:
+Checks if a user has this privilege for the specified set of parameters. Note that they are not `idtype[]`, but `text[]`. Each value of `object_ids` can be:
 
 * an id of some object in the database;
 *  `"__all__"` which means that this privilege is checked for all objects of the corresponding class;
@@ -126,7 +133,7 @@ The `privileges` parameter is a JSON array, elements of which can be:
 
 Example:
 
-	SELECT auth_interface.checked_privileges( user_id, '[
+	SELECT auth_interface.check_privileges( user_id, '[
 		"Access to CRM application",
 		["Perform a workflow transition Y on issues of customer X", [ 14341343, 3423242 ]]
 	]'::json );
@@ -156,14 +163,14 @@ Then the query is formed and executed.
 
 The return value is a JSONb of the following structure:
 
-    { "list" : [ {...}, {...}, .... ],
+    { "list" : [ {object1}, {...}, .... ],
 	  "n" : <total number>
 	}
 
-The list is usually a page of the whole selection, acccoring to `page` and `pagesize` parameters. The total number is required to organize page-by page view.
+The list is usually a page of the whole selection, based on `page` and `pagesize` parameters. The total number is required to organize a paginated view.
 If pagesize is zero, all objects will be returned.
 
-The SQL query is formed due to content of the `query` parameter, which is a JSONb object, described in the following sections.
+The SQL query is formed on the base of the content of the `query` parameter, which is a JSONb object, described in the following sections.
 
 ### Options
 
@@ -173,7 +180,6 @@ For the query options with names equal to names of table fields, filtering by fi
 
 | Field type              | Option value                | SQL fragment                              |
 | ----------------------- | --------------------------- | ----------------------------------------- |
-| numeric types           | `non_numeric_value`         | If the field references another table, resolve it by name: `field = (SELECT id FROM ref.table WHERE name = non_numeric_value` |
 | `bool`                  | `true`                      | `field`                                   |
 |                         | `false`                     | `NOT field`                               |
 |                         | `NULL`                      | `field IS NULL`                           |
@@ -182,17 +188,17 @@ For the query options with names equal to names of table fields, filtering by fi
 | `date`, `timestamp` etc | `[d1,d2]`                   | `field >= d1 AND field < d2`              |
 |                         | `[d1, null]`                | `field >= d1`                             |
 |                         | `[null, d2]`                | `field < d2`                              |
-| scalar types            | `[.....]`                   | `field = ANY(value)`                      |
-|                         | `scalar_value`              | `field = scalar_value`                    |
+| scalar types except dates and times  | `scalar_value` | `field = scalar_value`                    |
+|                         | `[..array..]`               | `field = ANY(array)`                      |
 |                         | `{ any: v }`                | `field = ANY(v)`                          |
 |                         | `{ not: array }`            | `NOT (field = ANY(array))`                |
 |                         | `{ not_null: true }`        | `field IS NOT NULL`                       | 
+| numeric types           | `non_numeric_value`         | If the field references another table, resolve it by name: `field = (SELECT id FROM ref.table WHERE name = non_numeric_value` |
 | array                   | `[.....]`                   | `field && value`                          |
 |                         | `{ contains_or_null: arr }` | `field && arr OR field IS NULL`           |
 |                         | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
 |                         | `{not: array }`             | `NOT (field && value) OR field IS NULL`   |
 |                         | `NULL`                      | `field IS NULL`
-
 
 Filters on several fields are joined with `AND`.
 
@@ -205,17 +211,17 @@ Special options are listed below:
 | `_order`           | `--expr` | `ORDER BY expr DESC NULLS LAST` |
 |                    | `-expr`  | `ORDER BY expr DESC`            |
 |                    | `expr`   | `ORDER BY expr`                 |
-|                    | `'specified'`       | Only if selecting by array of id: return objects in the same order as there identifiers are specified in the query. |
-|                    | '[array of expr]'   | ORDER BY several fields, above variants apply to each of them |
+|                    | `'specified'`       | Only if selecting by array of id: return objects in the same order as their identifiers are listed in the array |
+|                    | `[array of expr]`   | ORDER BY several fields, above variants apply to each of them |
 | `_fields`          | `[field_list]`      | fields to select from the table. If not specified, all fields will be selected. |
-| `_exclude_fields`  | `[field_list]`      | fields to exclude from the selection from the table.   |
+| `_exclude_fields`  | `[field_list]`      | fields to exclude from the selection.   |
 | `_group`           | `[field_list]`      | `GROUP BY <field_list>` |
 | `_aggr`            | `[aggregates list]` | currently only one aggregate is supported: `count` |
 | `with_can_update`  | `true`              | adds result of `schema.can_update_<table_name>(user_id, object_id::text, NULL::jsonb)` user-defined function |
 | `with_permissions` | `true`              | same as `with_can_update`, and also add result of `schema.can_delete_<table_name>(user_id, object_id::text)` user-defined function |
 | `__subclasses`     | `true`              | perform UNION of all the subclasses tables instead of querying this table, to get all the fields of them. |
 | `__root`           | node identifier     | perform a recursive query (supposed that the table represents a tree linked with `parent` field). |
-| `__tree`           | `'ordered'`         | sort the tree on the node positions (supposed that the child nodes of a same parent are sorted by `pos` field). |
+| `__tree`           | `'ordered'`         | sort the tree on the node positions (supposed that the child nodes within a single parent can be ordered by `pos` field). |
 | `without_count`    | `true`              | do not return total number of the objects. |
 
 
@@ -235,17 +241,17 @@ User 130 reads 3rd page of the news on computers.
 
 ### Extending mget
 
-#### query_<tablename> functions
+#### query_<tablename> functions (query preprocessors)
 
-User-defined Query functions can be used to extend the query construction possibilities. 
+User-defined query preprocessors can be used to extend the query construction features. 
 Such function should be defined as 
 
-    schema.query_<table_name> (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb
+    <schema>.query_<table_name> (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb
 
 The function accepts the current `internal_data` structure, modifies it and returns the new value. This structure represents the current state of the query preparation.
 `query` is the parameter of mget which is translated to the query function.
 
-Postquery functions for superclasses are called after postquery function for the current class.
+Query preprocessors for superclasses are called after the query preprocessor of the current class.
 
 The `internal_data` structure has the following fields: 
 
@@ -275,63 +281,234 @@ The main table in the query has an `m` alias.
 	SELECT auth_interface.tsearch('cms', 'news', 131, 1, 20, '{"status" : "published", "search": "Metanoia"}');
 
 
-#### postquery_<tablename> functions
+#### postquery_<tablename> functions (query postprocessors)
 
 User-defined Postquery functions can be used to post-process query results. 
 Such function should be defined as 
 
-    schema.postquery_<table_name> (user_id idtype, result jsonb, query jsonb) RETURNS jsonb
+    <schema>.postquery_<table_name> (user_id idtype, result jsonb, query jsonb) RETURNS jsonb
 
-Postquery functions for superclasses are called after postquery function for the current class. 
+Query postprocessors for superclasses are called after the query postprocessor of the current class.
+
 
 The `user_id` and `query` parameters are same as for the parent `mget` function; `result` is the array of objects to be returned by `mget`.
 The return value of a postquery function should be the modified array of objects or NULL if no modifications are required.
 
 ## save
 
+Saves an object into the database (inserts a new object or updates an existing one)
 
-Saves an object into database (inserts a new object or updates an existing one)
-
-`orm_interface.save(schema text, tablename text, id text,  user_id idtype, object jsonb, context jsonb) RETURNS jsonb`
-
-If a new object comes without identifier or with text pseudoidentifier (see below), it is automatically numbered using `orm.id_seq` sequence.
+`orm_interface.save(schema text, tablename text, id text,  user_id idtype, object jsonb, context jsonb) RETURNS json_pair`
 
 ### Options
+
+#### `schema`, `tablename`
+
+Target table of the operation
+
+#### `id`
+
+`id` is the object identifier. If `id` is a number or valid uuid (not yet supported) then `save` attempts to UPDATE the object with such identifier. 
+In other cases (`id` is NULL or a temporary text identifier (see below)) `save` will perform an INSERT. 
+The object identifier of the new object is taken from `object` JSON or, if not defined, automatically computed from `orm.id_seq` sequence or UUID generator.
+
+#### `user_id`
+
+The current user identifier
+
+### `object`
+
+The object field names and their values to be saved.
+
+### `context`
+
+A JSONB object for communications between several `save`s in a transaction or a script (see TRANSACTION SUPPORT below).
+
+### Return value
+
+Return value is a row of two JSONs: a saved object and a modified `context`.
+
+### Permissions checking
+
+If a `can_insert_<tablename>(user_id idtype, id text, data jsonb)` or `can_update_<tablename>(user_id idtype, id text, data jsonb)` user-defined function exists, 
+this function will be called before INSERT or UPDATE respectively. These permission checker functions should return true if the operation is allowed.
+If the action is not allowed, the cheker may return false or throw an informative exception.
+
+If the permission checker is not defined, orm-easy tries to call its internal chekers `orm.can_insert_object` or `orm.can_update_object` respectively. 
+There functions, defined in `can_object.sql`, check presense of `create_object` or `edit_object` privileges (see RBAC above) for at least one of the table and its superclass tables. 
+
+### Referencing by name
+
+If an object field contains a reference to other table having a `name` field, orm-easy allows referencing such table by name, not by `id`. 
+This works only if a corresponding referencial constraint exists in the database.
+
+Example:
+
+	INSERT INTO status (id,name) VALUES (1, 'done');
+	CREATE TABLE public.order (
+	    id     idtype PRIMARY KEY,
+	    status idtype REFERENCES status(id)
+	);
+	orm_interface.save('public', 'order', 
+					   12345678, -- order id
+					   101, -- user_id 
+					   '{ "status" : "done", /* a reference by name */ 
+					   ....}', '{}'
+    );
+    
+### Special values
+
+For some types of fields, special values are allowed:
+
+* For all field types, an undefined value will become NULL. 
+* For numeric fields, `me` will be replaced with current user id.
+* For date and time fields, `now` will be replaced with current date or time.
+* For boolean fields, any value which is equal to `true` in Perl sense, will be true
+* Updating numeric array fields can be done in add&delete style, like in the example below:
+
+	{ "array_field" : {
+  		"add" :  [1,2,3],   /* can be array or scalar here */
+  		"delete" :  [3,4,5] /* and here */
+  		}
+	}
 
 ### Extending save
 
 #### presave_<tablename> functions
 
+Presave handler is a user-defined called before saving an object to perform some user-defined field computations and additional checks. 
+Such handler should be defined as:
+
+	CREATE FUNCTION <schema>.presave_<tablename>(user_id idtype, id idtype, op text, old_data jsonb, new_data jsonb, original_schema_name text, original_table_name text) RETURNS jsonb
+
+The difference with database BEFORE INSERT or BEFORE UPDATE triggers is:
+* presave handlers are not called for manually run INSERTs and UPDATEs.
+* presave handlers are called for all superclass tables in the inheritance tree of the current table in-depth.
+
+The parameters are:
+* `user_id`: The current user identifier
+* `id`: The object identifier (if INSERT, it is the computed identifer)
+* `old_data`: The content of the object as a JSONB object (empty for INSERTs) before operation.
+* `new_data`: The updated fields as a JSONB object
+* `original_schema_name`: The name of the schema for each the `save` operation was called (may differ from the current handler schema in the case of table inheritance).
+* `original_table_name`: The name of the table for each the `save` operation was called (may differ from the current handler `tablename` in the case of table inheritance).
+
+Presave handler should return the `new_data` object, modified or not.
+
 #### postsave_<tablename> functions
+
+Postsave handler is a user-defined function is called after saving an object.
+
+It is completely similar to the presave handler.
 
 ## delete
 
 Deletes an object from database.
 
-`orm_interface.delete(schema text, tablename text,  id text, user_id idtype, object jsonb, context jsonb) RETURNS jsonb`
-
+`orm_interface.delete(schema text, tablename text,  id text, user_id idtype, context jsonb) RETURNS jsonb`
 
 ### Options
+
+#### `schema`, `tablename`
+
+Target table of the operation
+
+#### `id`
+
+`id` is the object identifier. 
+
+#### `user_id`
+
+The current user identifier
+
+### `context`
+
+A JSONB object for communications between several `save`s and `delete`s in a transaction or a script (see TRANSACTION SUPPORT below).
+
+### Return value
+
+Return value is a row of two JSONs: a saved object and a modified `context`.
+
+### Permissions checking
+
+If a `can_delete_<tablename>(user_id idtype, id text, data jsonb)` user-defined function exists, 
+this function will be called before INSERT or UPDATE respectively. These permission checker functions should return true if the operation is allowed.
+If the action is not allowed, the cheker may return false or throw an informative exception.
+
+If the permission checker is not defined, orm-easy tries to call its internal chekers `orm.can_delete_object` respectively. 
+There functions, defined in `can_object.sql`, check presense of `create_object` or `edit_object` privileges (see RBAC above) for at least one of the table and its superclass tables. 
 
 ### Extending delete
 
 #### predelete_<tablename> functions
 
+Predelete handler is a user-defined function called before deleting an object to perform some user-defined field computations, cascade deletions and additional checks. 
+Such handler should be defined as:
+
+	CREATE FUNCTION <schema>.predelete_<tablename>(user_id idtype, id idtype, op text, old_data jsonb, original_schema_name text, original_table_name text) RETURNS jsonb
+
+The difference with database BEFORE DELETE triggers is:
+* predelete handlers are not called for manually run DELETEs.
+* predelete handlers are called for all superclass tables in the inheritance tree of the current table in-depth.
+
+The parameters are:
+* `user_id`: The current user identifier
+* `id`: The object identifier
+* `old_data`: The content of the object as a JSONB object before operation 
+* `original_schema_name`: The name of the schema for each the `save` operation was called (may differ from the current handler schema in the case of table inheritance).
+* `original_table_name`: The name of the table for each the `save` operation was called (may differ from the current handler `tablename` in the case of table inheritance).
+
+Predelete handler return value is not yet processed.
+
 #### postdelete_<tablename> functions
+
+Postdelete handler is a user-defined function is called after saving an object.
+
+It is completely similar to the predelete handler.
 
 ## set\_order
 
     orm_interface.set_order (schema text, tablename text, ids jsonb, field text, user_id idtype, context jsonb)
 
-## Transaction support
+## Other features
 
-### Pseudoidentifiers
+### global unique ids
+
+We require each table to have a primary key `id`. 
+A strong recommendation is to provide all the `id`s from a single sequence to make them unique between tables. 
+`save` function implements this policy by getting the new object identifiers from `orm.id_seq` sequence.
+
+### Temporary identifiers
+
+Multiple `save` and `delete` functions can be run sequentially in a transaction or script. orm-easy provides tools to transport some information context from one to another `save` call. 
+A frequent use case is a sequence of `save`s with cross-references between object being saved. 
+The problem is that when the first object is not yet created, its `id` is unknown and we cannot prepack all the `save` sequence in advance. 
+orm-easy allows to solve this problem by using temporary text identifiers which can be used where integer identifiers are yet unknown. 
+
+Example:
+
+	orm_interface.save('public', 'order', 
+					   'new_order', -- temporary id!
+					   101, -- user_id 
+					   '{....}', '{}'
+    );
+    orm_interface.save('public', 'order_item', 
+					   NULL,/* id */
+					   101, -- user_id 
+					   '{"order" : "new_order",  /* a reference to a temporary id */
+					     ....
+					    }', '{}');
+
+This allows to prepack a transaction with creating several connected objects without waiting for the first operation or reserving `id` in advance.
+
+Note that resolving temporary identifiers is done after resolving references by name (see 'referencing by name' in `save` description above). Avoid ambiguity.
 
 
+### File storage
 
-## File storage
+To do.
 
-## Other functions
+### Working with trees
 
 ## Tables
 
@@ -345,9 +522,11 @@ orm-easy contains several installation scripts which create all necessary object
 `sql/00_idtype_int8.sql` – defines `idtype` as `int8`
 `sql/00_idtype_uuid.sql` – defines `idtype` as `uuid`
 
-Run only one of these scripts before any other one.
+Run only one of the tree above scripts before any other one.
 
 `sql/00_plperl.sql` – creates PL/Perl with `bool_plperl` and `jsonb_plperl` extensions. Needs to be ran before creating any orm-easy functions.
+`sql/id_seq.sql` – creates the `id_seq` sequence for the automatic provision of numeric identifiers for the database objects.
+`sql/schema.sql` – creates the orm-easy schemas `orm_interface` for the API functions and `orm` for the internal data and functions.
 `sql/tables.sql` – creates the orm-easy tables
 
 
@@ -356,6 +535,11 @@ Run only one of these scripts before any other one.
 
 `sql/rbac_tables.sql` – defines tables used for RBAC (roles, privileges and relationships between them).
 `sql/rbac_functions.sql` – defines RBAC functions
+`sql/can_object.sql` – defines functions to check object permissions
+`sql/store_file.sql` – defines functions for file storage
+
+`sql/presave__traceable.sql` – defines presave handler for `_traceable` class. Also can be used as an example.
+`sql/query__traceable.sql` – defines query preprocessor for `_traceable` class. Also can be used as an example.
 
 
 

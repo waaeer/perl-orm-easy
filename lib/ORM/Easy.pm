@@ -1,4 +1,4 @@
 package ORM::Easy;
-our $VERSION="0.3";
+our $VERSION="0.5";
 
 1;

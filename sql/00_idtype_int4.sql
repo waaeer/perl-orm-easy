@@ -51,7 +51,7 @@ CREATE OPERATOR CLASS gist__idtypebig_ops FOR TYPE idtype[] USING gist AS
 CREATE OPERATOR CLASS gin__idtype_ops FOR TYPE idtype[] USING gin AS
 	OPERATOR	3	&&,
 	OPERATOR	6	= (anyarray, anyarray),
-	OPERATOR	8	<@,
+	OPERATOR	8	<@ (_int4,_int4),
 	OPERATOR	20	@@ (_int4, query_int),
 	FUNCTION	1	btint4cmp (int4, int4),
 	FUNCTION	2	ginarrayextract (anyarray, internal, internal),
