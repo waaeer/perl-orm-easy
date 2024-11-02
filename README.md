@@ -241,7 +241,7 @@ User 130 reads 3rd page of the news on computers.
 
 ### Extending mget
 
-#### query_<tablename> functions (query preprocessors)
+#### query_&lt;tablename&gt; functions (query preprocessors)
 
 User-defined query preprocessors can be used to extend the query construction features. 
 Such function should be defined as 
@@ -281,7 +281,7 @@ The main table in the query has an `m` alias.
 	SELECT auth_interface.tsearch('cms', 'news', 131, 1, 20, '{"status" : "published", "search": "Metanoia"}');
 
 
-#### postquery_<tablename> functions (query postprocessors)
+#### postquery_&lt;tablename&gt; functions (query postprocessors)
 
 User-defined Postquery functions can be used to post-process query results. 
 Such function should be defined as 
@@ -364,17 +364,20 @@ For some types of fields, special values are allowed:
 * For numeric fields, `me` will be replaced with current user id.
 * For date and time fields, `now` will be replaced with current date or time.
 * For boolean fields, any value which is equal to `true` in Perl sense, will be true
-* Updating numeric array fields can be done in add&delete style, like in the example below:
+* Updating numeric array fields can be done in add&delete style, like in the example below.
 
-	{ "array_field" : {
-  		"add" :  [1,2,3],   /* can be array or scalar here */
-  		"delete" :  [3,4,5] /* and here */
-  		}
+Example:
+
+	{ 
+		"array_field" : {
+			"add"    :  [1,2,3], /* can be array or scalar here */
+			"delete" :  [3,4,5]  /* and here */
+		}
 	}
 
 ### Extending save
 
-#### presave_<tablename> functions
+#### presave_&lt;tablename&gt; functions
 
 Presave handler is a user-defined called before saving an object to perform some user-defined field computations and additional checks. 
 Such handler should be defined as:
@@ -382,10 +385,12 @@ Such handler should be defined as:
 	CREATE FUNCTION <schema>.presave_<tablename>(user_id idtype, id idtype, op text, old_data jsonb, new_data jsonb, original_schema_name text, original_table_name text) RETURNS jsonb
 
 The difference with database BEFORE INSERT or BEFORE UPDATE triggers is:
+
 * presave handlers are not called for manually run INSERTs and UPDATEs.
 * presave handlers are called for all superclass tables in the inheritance tree of the current table in-depth.
 
 The parameters are:
+
 * `user_id`: The current user identifier
 * `id`: The object identifier (if INSERT, it is the computed identifer)
 * `old_data`: The content of the object as a JSONB object (empty for INSERTs) before operation.
@@ -395,7 +400,7 @@ The parameters are:
 
 Presave handler should return the `new_data` object, modified or not.
 
-#### postsave_<tablename> functions
+#### postsave_&lt;tablename&gt; functions
 
 Postsave handler is a user-defined function is called after saving an object.
 
@@ -440,7 +445,7 @@ There functions, defined in `can_object.sql`, check presense of `create_object` 
 
 ### Extending delete
 
-#### predelete_<tablename> functions
+#### predelete_&lt;tablename&gt; functions
 
 Predelete handler is a user-defined function called before deleting an object to perform some user-defined field computations, cascade deletions and additional checks. 
 Such handler should be defined as:
@@ -448,10 +453,12 @@ Such handler should be defined as:
 	CREATE FUNCTION <schema>.predelete_<tablename>(user_id idtype, id idtype, op text, old_data jsonb, original_schema_name text, original_table_name text) RETURNS jsonb
 
 The difference with database BEFORE DELETE triggers is:
+
 * predelete handlers are not called for manually run DELETEs.
 * predelete handlers are called for all superclass tables in the inheritance tree of the current table in-depth.
 
 The parameters are:
+
 * `user_id`: The current user identifier
 * `id`: The object identifier
 * `old_data`: The content of the object as a JSONB object before operation 
@@ -460,11 +467,20 @@ The parameters are:
 
 Predelete handler return value is not yet processed.
 
-#### postdelete_<tablename> functions
+#### postdelete_&lt;tablename&gt; functions
 
 Postdelete handler is a user-defined function is called after saving an object.
 
 It is completely similar to the predelete handler.
+
+
+## msave
+
+Saves multiple objects in one call by saving a set of objects found by `mget`.
+
+	`orm_interface.mget(schema text, tablename text, user_id idtype, page int, pagesize int, query jsonb, data jsonb, context jsonb) RETURNS jsonb`
+	
+Performs save with given `data` on each object in the page which would be returned by `mget` with given corresponding parameters.
 
 ## set\_order
 
@@ -472,7 +488,7 @@ It is completely similar to the predelete handler.
 
 ## Other features
 
-### global unique ids
+### Global unique ids
 
 We require each table to have a primary key `id`. 
 A strong recommendation is to provide all the `id`s from a single sequence to make them unique between tables. 
@@ -510,6 +526,8 @@ To do.
 
 ### Working with trees
 
+To do.
+
 ## Tables
 
 To do.
@@ -519,26 +537,35 @@ To do.
 orm-easy contains several installation scripts which create all necessary objects in the database. 
 
 `sql/00_idtype_int4.sql` – defines `idtype` as `int4`
+
 `sql/00_idtype_int8.sql` – defines `idtype` as `int8`
+
 `sql/00_idtype_uuid.sql` – defines `idtype` as `uuid`
 
 Run only one of the tree above scripts before any other one.
 
 `sql/00_plperl.sql` – creates PL/Perl with `bool_plperl` and `jsonb_plperl` extensions. Needs to be ran before creating any orm-easy functions.
+
 `sql/id_seq.sql` – creates the `id_seq` sequence for the automatic provision of numeric identifiers for the database objects.
+
 `sql/schema.sql` – creates the orm-easy schemas `orm_interface` for the API functions and `orm` for the internal data and functions.
+
 `sql/tables.sql` – creates the orm-easy tables
 
-
 `sql/functions.sql` – defines some internal orm-easy functions
+
 `sql/api_functions.sql` – defines the main API functions: `mget`, `save`, `delete`, `set_order`.
 
 `sql/rbac_tables.sql` – defines tables used for RBAC (roles, privileges and relationships between them).
+
 `sql/rbac_functions.sql` – defines RBAC functions
+
 `sql/can_object.sql` – defines functions to check object permissions
+
 `sql/store_file.sql` – defines functions for file storage
 
 `sql/presave__traceable.sql` – defines presave handler for `_traceable` class. Also can be used as an example.
+
 `sql/query__traceable.sql` – defines query preprocessor for `_traceable` class. Also can be used as an example.
 
 

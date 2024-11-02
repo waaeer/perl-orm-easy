@@ -33,8 +33,7 @@ sub unbless_arrays_in_rows {
 		foreach my $k ( keys %$r) {
 			if (UNIVERSAL::isa($r->{$k} , 'PostgreSQL::InServer::ARRAY')) {
 				$r->{$k} = $r->{$k}->{array};
-			}
-			
+			}			
 		}
 	}
 }
