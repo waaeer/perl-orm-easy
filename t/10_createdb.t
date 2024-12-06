@@ -14,7 +14,7 @@ my $pgsql = eval { Test::PostgreSQL->new( pg_config => qq|
        |) }
         or plan skip_all => $@;
  
-plan tests =>6; 
+plan tests =>7; 
 
 my $dbh = DBI->connect($pgsql->dsn);
 ok(1);
@@ -63,6 +63,13 @@ is(normalize_json( $dbh->selectcol_arrayref(qq!SELECT orm_interface.mget('public
    normalize_json( {n=> "100", list => [ { id=>"1",name => 'xyz'}, { id=>"2",name => 'xyz'}, { id=>"3",name => 'x3'}, { id=>"4",name => 'x4'}]}),
    'msaved'
 );
+
+$dbh->do(qq!CREATE TABLE public.test_table (id idtype, a text, b date, c daterange)!);
+$dbh->do(q!CREATE FUNCTION public.can_insert_test_table(user_id idtype, id_ text, data jsonb) RETURNS bool LANGUAGE sql AS $$ SELECT true; $$!);
+
+$dbh->do(qq!SELECT orm_interface.save('public','test_table', NULL, 0, '{"id":1, "c": [ "2018-02-01", null ]}', '{}')!);
+
+is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 1!)->[0], '[2018-02-01,infinity)', 'save_daterange');
 
 
 
