@@ -58,8 +58,9 @@ sub array2daterange {
 	my $val = shift;
 	if($val) { 
 		my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d)$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
-		my $c1 = $bounds[0] ? '[' : '(';
-		my $c2 = $bounds[1] ? ']' : ')';
+		my $brackets = $val->[2];
+		my $c1 = $brackets ? (substr($brackets,0,1) eq '(' ? '(' : '[' ): $bounds[0] ? '[' : '(';
+		my $c2 = $brackets ? (substr($brackets,1,1) eq ']' ? ']' : ')' ): ')';
 		$bounds[0] ||= '-infinity';
 		$bounds[1] ||= 'infinity';
 		return sprintf('%s%s,%s%s', $c1, @bounds, $c2);

@@ -14,7 +14,7 @@ my $pgsql = eval { Test::PostgreSQL->new( pg_config => qq|
        |) }
         or plan skip_all => $@;
  
-plan tests =>8; 
+plan tests =>9; 
 
 my $dbh = DBI->connect($pgsql->dsn);
 ok(1);
@@ -69,10 +69,11 @@ $dbh->do(q!CREATE FUNCTION public.can_insert_test_table(user_id idtype, id_ text
 
 $dbh->do(qq!SELECT orm_interface.save('public','test_table', NULL, 0, '{"id":1, "c": [ "2018-02-01", null ]}', '{}')!);
 $dbh->do(qq!SELECT orm_interface.save('public','test_table', NULL, 0, '{"id":2, "c": [ null, "2018-02-01" ]}', '{}')!);
+$dbh->do(qq!SELECT orm_interface.save('public','test_table', NULL, 0, '{"id":3, "c": [ null, "2018-02-01" , "(]" ]}', '{}')!);
 
 is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 1!)->[0], '[2018-02-01,infinity)', 'save_daterange1');
-is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 2!)->[0], '(-infinity,2018-02-02)', 'save_daterange2');
-
+is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 2!)->[0], '(-infinity,2018-02-01)', 'save_daterange2');
+is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 3!)->[0], '(-infinity,2018-02-02)', 'save_daterange3');
 
 
 sub normalize_json {
