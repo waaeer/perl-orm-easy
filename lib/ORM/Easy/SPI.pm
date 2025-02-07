@@ -617,22 +617,25 @@ sub _mget {
   $nsql = "$uwith SELECT COUNT(*) AS value FROM $table m $join $where";
 
   my $debug = $query->{__debug};  # foDo: check permissions
+  my $list;
 warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
 warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind) if $debug;
   my %ret;
-  $ret{list} = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
+  if(!defined($pagesize) || $pagesize>0) {
+	$list = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
+  }
 
 #warn "ret list is ", Data::Dumper::Dumper($ret{list});
   if (!$query->{without_count}) {
-	my $l = scalar(@{$ret{list}});
+	my $l = $list ? @$list : 0;
 	$ret{n} =
 		($l < $pagesize)
 		? ($page-1)*$pagesize + $l
 		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
-
+  if($list) {
 #### For Pg < 13 without transforms for bool: fix bools in rows manually
-  my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
+  	my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname
 		FROM pg_attribute a
 		JOIN pg_type t ON a.atttypid = t.oid
@@ -640,24 +643,24 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		  AND a.attnum>0
 		  AND NOT a.attisdropped
 		  AND t.typcategory = 'B'
-	!, [ 'text', 'text'],
+	 !, [ 'text', 'text'],
 	   [ $schema, $tablename]
 	)->{rows};
 
-  if($bool_fields && @$bool_fields) {
-	foreach my $o (@{$ret{list}}) {
-		foreach my $f (@$bool_fields) {
-			my $fn = $f->{attname};
-			if(defined $o->{$fn}) {
-				$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
+	if($bool_fields && @$bool_fields) {
+		foreach my $o (@$list) {
+			foreach my $f (@$bool_fields) {
+				my $fn = $f->{attname};
+				if(defined $o->{$fn}) {
+					$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
+				}
 			}
 		}
 	}
-  }
 
 ### While no transform for spoint:
 
-  my $spoint_fields = ORM::Easy::SPI::spi_run_query(q!
+	my $spoint_fields = ORM::Easy::SPI::spi_run_query(q!
 		SELECT attname
 		FROM pg_attribute a
 		JOIN pg_type t ON a.atttypid = t.oid
@@ -665,49 +668,50 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		  AND a.attnum>0
 		  AND NOT a.attisdropped
 		  AND t.typname = 'spoint'
-	!, [ 'text', 'text'],
-	   [ $schema, $tablename]
+	 !, [ 'text', 'text'],
+	    [ $schema, $tablename]
 	)->{rows};
 
-  if($spoint_fields && @$spoint_fields) {
-	foreach my $o (@{$ret{list}}) {
-		foreach my $f (@$spoint_fields) {
-			my $fn = $f->{attname};
-			if(defined $o->{$fn}) {
-				if($o->{$fn} =~ /\(\s*(\-?[\d\.]+)\s*,\s*(\-?[\d\.]+)\s*\)/) {
-					$o->{$fn} = { lat => $2*57.295779513, lng => $1*57.295779513 };
+  	if($spoint_fields && @$spoint_fields) {
+		foreach my $o (@$list) {
+			foreach my $f (@$spoint_fields) {
+				my $fn = $f->{attname};
+				if(defined $o->{$fn}) {
+					if($o->{$fn} =~ /\(\s*(\-?[\d\.]+)\s*,\s*(\-?[\d\.]+)\s*\)/) {
+						$o->{$fn} = { lat => $2*57.295779513, lng => $1*57.295779513 };
+					}
 				}
 			}
 		}
-	}
-  }
-  if($query->{with_can_update} || $query->{with_permissions}) { # ensure compatibility
-	foreach my $o (@{$ret{list}}) {
-		$o->{can_edit} = $o->{can_update};
-	}
-  }
-
-
+  	}
+	if($query->{with_can_update} || $query->{with_permissions}) { # ensure compatibility
+		foreach my $o (@{$ret{list}}) {
+			$o->{can_edit} = $o->{can_update};
+    	}
+    }
+  
 
 ########## Smart postprocess-triggers for all superclasses (including this class)
 
-  foreach my $o ( @{ $q->{superclasses} }) {
-	my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
+  	foreach my $o ( @{ $q->{superclasses} }) {
+		my $func = ORM::Easy::SPI::spi_run_query(q! SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1!,
 			[ 'name', 'name'], [ $o->{schema}, "postquery_$o->{tablename}"] )->{rows};
 #		warn "try postquery $o->{schema} $o->{tablename}\n";
-	if(@$func) {
+		if(@$func) {
 #		warn "call $o->{schema}.postquery_$o->{tablename} $q $query\n";
-		my $new_list = ORM::Easy::SPI::spi_run_query_expr(
-					::quote_ident($o->{schema}).'.'.::quote_ident("postquery_$o->{tablename}").'($1, $2, $3)',
-					[ 'idtype', 'jsonb', 'jsonb'],
-					[ $user_id, $ret{list}, $query ]
-		);
-		if($new_list) {
-			$ret{list} = $new_list;
-		}
+			my $new_list = ORM::Easy::SPI::spi_run_query_expr(
+				::quote_ident($o->{schema}).'.'.::quote_ident("postquery_$o->{tablename}").'($1, $2, $3)',
+				[ 'idtype', 'jsonb', 'jsonb'],
+				[ $user_id, $list, $query ]
+			);
+			if($new_list) {
+				$list = $new_list;
+			}
 #		warn "done $o->{schema}.postquery_$o->{tablename} c=\n";
-
-	}
+		}
+  	}
+  	
+  	$ret{list} = $list;
   }
   %ORM::Easy::SPI::tmp_cache = ();
   return \%ret;
@@ -900,10 +904,10 @@ sub _save {
 				push @types, "$tschema.$type";
 				push @args,  $val;
 			}
-		} elsif ($type eq 'daterange' && ref($val) eq 'ARRAY') {
+		} elsif ($type =~ /^daterange/ && ref($val) eq 'ARRAY') {
 			push @types, $type;
 			push @args, array2daterange($val);
-		} elsif (($type =~ /^(tstz|date)range$/) && ref($val) eq 'HASH') {
+		} elsif (($type =~ /^(tstz|date)range/) && ref($val) eq 'HASH') {
 			my ($lower,$upper, $lok, $uok);
 			if (exists $val->{upper}) { $upper = $val->{upper}; $uok = 1; }
 			if (exists $val->{lower}) { $lower = $val->{lower}; $lok = 1; }
@@ -913,14 +917,14 @@ sub _save {
 			if($lok || $uok) {
 				if ($op eq 'update') {
 					my $interval = ($lok ? "'$lower'": "coalesce(lower($qf)::text,'')") . "|| ',' ||" . ($uok ? "'$upper'" : "coalesce(upper($qf)::text,'')");
-					$exprs{$f} = qq!(case when lower_inc($qf) then '[' else '(' end || $interval || case when upper_inc($qf) then ']' else ')' end )::daterange  !;
+					$exprs{$f} = qq!(case when lower_inc($qf) then '[' else '(' end || $interval || case when upper_inc($qf) then ']' else ')' end )::"$type"  !;
 				} else {
 					my $interval = ($lok ? "'$lower'": "") . "|| ',' ||" . ($uok ? "$upper" : "");
-					$exprs{$f} = qq!'[' || $interval || ']::daterange'!;
+					$exprs{$f} = qq!'[' || $interval || ']::"$type"'!;
 				}
 			}
 		} elsif ($type eq 'tstzrange' && ref($val) eq 'ARRAY') {
-			my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d).*$/ ? $_ : die("Bad format of date in date range: $_") ) : undef   } @$val[0,1];
+			my @bounds = map { $_ ? ( /^(\d\d\d\d)-(\d\d)-(\d\d).*$/ ? $_ : die("Bad format of date in tstz range: $_") ) : undef   } @$val[0,1];
 			push @types, $type;
 			push @args, sprintf('[%s,%s]', @bounds);
 		} elsif ($typtype eq 'e' && $val eq '') {

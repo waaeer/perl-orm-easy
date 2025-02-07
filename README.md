@@ -480,7 +480,7 @@ Saves multiple objects in one call by saving a set of objects found by `mget`.
 
 	`orm_interface.mget(schema text, tablename text, user_id idtype, page int, pagesize int, query jsonb, data jsonb, context jsonb) RETURNS jsonb`
 	
-Performs save with given `data` on each object in the page which would be returned by `mget` with given corresponding parameters.
+Performs `save` with given `data` on each object in the page which would be returned by `mget` with given corresponding parameters.
 
 ## set\_order
 
