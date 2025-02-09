@@ -1,3 +1,10 @@
+liborm-easy-perl (0.6) unstable; urgency=medium
+
+  * added abstract and array references processing
+  * more documenatation
+
+ -- Ivan Panchenko <wao@mail.ru>  Mon, 10 Feb 2025 01:07:00 +0300
+
 liborm-easy-perl (0.5) unstable; urgency=medium
 
   * added tests
@@ -5,7 +12,6 @@ liborm-easy-perl (0.5) unstable; urgency=medium
   * new msave function
 
  -- Ivan Panchenko <wao@mail.ru>  Wed, 30 Oct 2024 14:00:00 +0300
-
 
 liborm-easy-perl (0.3-3) unstable; urgency=medium
 

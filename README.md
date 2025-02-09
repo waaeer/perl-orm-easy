@@ -21,6 +21,14 @@ and some additional ones:
 - `set_order` (numerate a set of objects in a given order)
 - `set_order_parent` (same as `set_order` and also sets a `parent` field - useful for moving nodes in trees)
 
+Additional  features:
+
+- transaction support
+- multiuser work with access control 
+- logging historical records
+- managing file storage
+- referential constraints for inherited tables and arrays
+
 ### Multiuser work
 
 Each action is done on behalf of some application level user, identified by its `id` of `idtype`. The user authentication is expected to be somewhere in the application
@@ -520,13 +528,55 @@ This allows to prepack a transaction with creating several connected objects wit
 Note that resolving temporary identifiers is done after resolving references by name (see 'referencing by name' in `save` description above). Avoid ambiguity.
 
 
-### File storage
+### File storage management
 
 To do.
 
 ### Working with trees
 
 To do.
+
+
+### Referential constraints for inherited tables
+
+In PostgreSQL, you can inherit tables so that their fields are inherited, but foreign keys to this fields are not inherited. 
+To ensure referential integrity in the sense of referencing a system of inherited tables, orm-easy provides a set of predefined triggers and a metadata table.
+
+An example: 
+
+	CREATE TABLE schema1.some_base_class ( ... );
+	CREATE TABLE schema1.first_subclass ( ... ) INHERITS (schema1.some_base_class);
+	CREATE TABLE schema1.other_subclass ( ... ) INHERITS (schema1.some_base_class);
+ 
+	CREATE TABLE schema2.some_referencing_class (
+	   ....
+	   some_ref idtype, -- you cannot write: REFERENCES schema1.some_base_class(id)
+	);
+ 
+To ensure referencial integrity ("`some_ref` field references `id` in a subclass of `some_base_class`), create a metadata record:
+
+	INSERT INTO orm.abstract_foreign_key('schema2','some_referencing_class', 'some_ref', 'schema1','some_base_class');
+ 
+This will create triggers which are necessary to check the integrity.
+
+Attention: After adding / removing inherited tables the metadata record should be recreated. Unfortunately, PostgreSQL provides no means to process this automatically.
+
+### Referential constraints for arrays 
+
+In PostgreSQL, you cannot put referential constraints on arrays. orm-easy allows to make an array of references with integrity checks.
+
+An example:
+
+	CREATE TABLE schema1.t1 ( .... );
+	CREATE TABLE schema2.t2 ( 
+	 ....
+	 some_ref idtype[], -- you cannot write: REFERENCES schema1.t1(id)
+	);
+ 
+To ensure referencial integrity ("`some_ref` is an array of references to `id` in `t1` table), create a metadata record:
+ 
+	INSERT INTO orm.array_foreign_key('schema2','t2', 'some_ref', 'schema1','t1');
+
 
 ## Tables
 
@@ -568,7 +618,7 @@ Run only one of the tree above scripts before any other one.
 
 `sql/query__traceable.sql` – defines query preprocessor for `_traceable` class. Also can be used as an example.
 
-
+`sql/foreign_keys.sql` -- defines tools to enable array and abstract foreign keys.
 
 
 

@@ -18,6 +18,7 @@ sql/00_idtype_int4.sql
 sql/00_plperl.sql
 sql/api_functions.sql
 sql/can_object.sql
+sql/foreign_keys.sql
 sql/functions.sql
 sql/id_seq.sql
 sql/presave__traceable.sql

@@ -14,7 +14,7 @@ my $pgsql = eval { Test::PostgreSQL->new( pg_config => qq|
        |) }
         or plan skip_all => $@;
  
-plan tests =>9; 
+plan tests =>16; 
 
 my $dbh = DBI->connect($pgsql->dsn);
 ok(1);
@@ -33,6 +33,7 @@ $pgsql -> run_psql('-f', 'sql/api_functions.sql');
 $pgsql -> run_psql('-f', 'sql/store_file.sql');
 $pgsql -> run_psql('-f', 'sql/presave__traceable.sql');
 $pgsql -> run_psql('-f', 'sql/query__traceable.sql');
+$pgsql -> run_psql('-f', 'sql/foreign_keys.sql');
 ok(1);
 
 $dbh->do(q!CREATE TABLE public.object(id idtype, name text, x int) INHERITS (orm._traceable)!);
@@ -75,6 +76,58 @@ is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 1!)->[0], '[2
 is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 2!)->[0], '(-infinity,2018-02-01)', 'save_daterange2');
 is($dbh->selectcol_arrayref(qq!SELECT c FROM test_table WHERE id = 3!)->[0], '(-infinity,2018-02-02)', 'save_daterange3');
 
+
+## check abstract foreign keys
+$dbh->do(qq!CREATE SCHEMA schema1!);
+$dbh->do(qq!CREATE SCHEMA schema2!);
+$dbh->do(qq!CREATE TABLE schema1.some_base_class (id idtype PRIMARY KEY, name text ) !);
+$dbh->do(qq!CREATE TABLE schema1.first_subclass (  ) INHERITS (schema1.some_base_class)!);
+$dbh->do(qq!CREATE TABLE schema1.other_subclass (  ) INHERITS (schema1.some_base_class)!);
+$dbh->do(qq!CREATE TABLE schema2.some_referencing_class (id idtype PRIMARY KEY, some_ref idtype)!);
+$dbh->do(qq!INSERT INTO orm.abstract_foreign_key VALUES ('schema2', 'some_referencing_class', 'some_ref', 'schema1', 'some_base_class')!);
+
+$dbh->do(qq!INSERT INTO schema1.first_subclass VALUES (1,'XXX'),(2,'YYY'),(3,'ZZZ')!);
+$dbh->do(qq!INSERT INTO schema2.some_referencing_class VALUES (4,2)!);
+
+$dbh->do(qq!INSERT INTO schema2.some_referencing_class VALUES (5,5)!);
+is(dbh_error(), "schema2.some_referencing_class.some_ref = 5 should reference to schema1.some_base_class.id", 'abstract FK insert');
+
+my $n = $dbh->selectcol_arrayref(qq!SELECT count(*) FROM schema2.some_referencing_class!)->[0];
+is($n,1, 'abstract FK n');
+
+$dbh->do(qq!DELETE FROM schema1.first_subclass WHERE id=2!);
+is(dbh_error(), "Referenced object deletion: schema1.some_base_class.id = schema2.some_referencing_class.some_ref", 'abstract FK delete');
+
+my $m = $dbh->selectcol_arrayref(qq!SELECT count(*) FROM schema1.first_subclass!)->[0];
+is($m,3, 'abstract FK deleted');
+
+## check array foreign keys
+
+$dbh->do(qq!CREATE TABLE schema1.t1 (id idtype)!);
+$dbh->do(qq!CREATE TABLE schema2.t2 (id idtype, refs idtype[])!);
+$dbh->do(qq!INSERT INTO orm.array_foreign_key VALUES ('schema2', 't2', 'refs', 'schema1', 't1')!);
+
+$dbh->do(qq!INSERT INTO schema1.t1 VALUES (1), (2), (3)!);
+
+$dbh->do(qq!INSERT INTO schema2.t2 VALUES (4, ARRAY[1,2])!);
+$dbh->do(qq!INSERT INTO schema2.t2 VALUES (5, ARRAY[5])!);
+is(dbh_error(), "schema2.t2.refs = 5 should reference schema1.t1.id", 'array FK insert');
+$dbh->do(qq!INSERT INTO schema2.t2 VALUES (6, ARRAY[1,NULL])!);
+is(dbh_error(), "schema2.t2.refs =  should reference schema1.t1.id", 'array FK insert 2');
+$dbh->do(qq!DELETE FROM schema1.t1 WHERE id = 1!);
+is(dbh_error(), "Referenced object deletion: schema1.t1.id in schema2.t2.refs", 'array FK delete');
+
+
+
+
+
+sub dbh_error { 
+	my $err = $dbh->errstr;
+	$err =~ s/^ERROR:\s+//;
+	$err =~ s/\s+at line \d+\..*$//s;
+	$err =~ s/\s*\n.*$//s;
+	return $err;
+}
 
 sub normalize_json {
 	my ($x) = @_;

@@ -128,8 +128,6 @@ CREATE OR REPLACE FUNCTION orm.get_terminal_subclasses(schema_ text, tablename_ 
 	WITH tree AS (SELECT * FROM orm.get_subclasses(schema_, tablename_))
 	SELECT * FROM tree t
 		WHERE NOT EXISTS (SELECT * FROM tree t1 WHERE t1.parent = t.id);
-
-
 $$;
 
 
