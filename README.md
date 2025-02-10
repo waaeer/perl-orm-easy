@@ -553,7 +553,7 @@ An example:
 	   some_ref idtype, -- you cannot write: REFERENCES schema1.some_base_class(id)
 	);
  
-To ensure referencial integrity ("`some_ref` field references `id` in a subclass of `some_base_class`), create a metadata record:
+To ensure referencial integrity (like `some_ref` field references `id` in a subclass of `some_base_class`), create a metadata record:
 
 	INSERT INTO orm.abstract_foreign_key('schema2','some_referencing_class', 'some_ref', 'schema1','some_base_class');
  
@@ -573,7 +573,7 @@ An example:
 	 some_ref idtype[], -- you cannot write: REFERENCES schema1.t1(id)
 	);
  
-To ensure referencial integrity ("`some_ref` is an array of references to `id` in `t1` table), create a metadata record:
+To ensure referencial integrity (like `some_ref` is an array of references to `id` in `t1` table), create a metadata record:
  
 	INSERT INTO orm.array_foreign_key('schema2','t2', 'some_ref', 'schema1','t1');
 

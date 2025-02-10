@@ -17,11 +17,16 @@ CREATE TABLE orm.abstract_foreign_key (
 );
 
 CREATE OR REPLACE FUNCTION orm.array_foreign_key_i () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    DECLARE v int;
+    	cmd text;
 	BEGIN
-		EXECUTE 'CREATE OR REPLACE TRIGGER '   || quote_ident(NEW.src_table || '_afk' ) 
+		v = regexp_replace(version(),'PostgreSQL (\d+).*$','\1')::int;
+		cmd = CASE WHEN v <=13 THEN 'CREATE TRIGGER ' ELSE 'CREATE OR REPLACE TRIGGER ' END;
+		
+		EXECUTE cmd || quote_ident(NEW.src_table || '_afk' ) 
 		     || ' BEFORE INSERT OR UPDATE ON ' || quote_ident(NEW.src_schema) || '.' || quote_ident(NEW.src_table)
 		     || ' FOR EACH ROW EXECUTE FUNCTION orm.check_outgoing_array_refs()';
-		EXECUTE 'CREATE OR REPLACE TRIGGER '   || quote_ident(NEW.dst_table || '_ifk' ) 
+		EXECUTE cmd || quote_ident(NEW.dst_table || '_ifk' ) 
 		     || ' BEFORE DELETE           ON ' || quote_ident(NEW.dst_schema) || '.' || quote_ident(NEW.dst_table)
 		     || ' FOR EACH ROW EXECUTE FUNCTION orm.check_incoming_array_refs()';
 	RETURN NEW;
@@ -45,12 +50,17 @@ $$;
 
 CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_i () RETURNS TRIGGER LANGUAGE plpgsql AS $$
 	DECLARE r RECORD;
+        v int;
+    	cmd text;
 	BEGIN
-		EXECUTE 'CREATE OR REPLACE TRIGGER '   || quote_ident(NEW.src_table || '_bfk' ) 
+		v = regexp_replace(version(),'PostgreSQL (\d+).*$','\1')::int;
+		cmd = CASE WHEN v <=13 THEN 'CREATE TRIGGER ' ELSE 'CREATE OR REPLACE TRIGGER ' END;
+		
+		EXECUTE cmd || quote_ident(NEW.src_table || '_bfk' ) 
 		     || ' BEFORE INSERT OR UPDATE ON ' || quote_ident(NEW.src_schema) || '.' || quote_ident(NEW.src_table)
 		     || ' FOR EACH ROW EXECUTE FUNCTION orm.check_outgoing_abstract_refs()';
 		FOR r IN SELECT * FROM orm.get_subclasses(NEW.dst_schema, NEW.dst_table) LOOP
-			EXECUTE 'CREATE OR REPLACE TRIGGER '   || quote_ident(r.tablename || '_kfk' ) 
+			EXECUTE cmd || quote_ident(r.tablename || '_kfk' ) 
 		         || ' BEFORE DELETE           ON ' || quote_ident(r.schema) || '.' || quote_ident(r.tablename)
 		         || ' FOR EACH ROW EXECUTE FUNCTION orm.check_incoming_abstract_refs()';
 		
