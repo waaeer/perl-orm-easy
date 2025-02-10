@@ -22,6 +22,12 @@ CREATE OR REPLACE FUNCTION orm.array_foreign_key_i () RETURNS TRIGGER LANGUAGE p
 	BEGIN
 		v = regexp_replace(version(),'PostgreSQL (\d+).*$','\1')::int;
 		cmd = CASE WHEN v <=13 THEN 'CREATE TRIGGER ' ELSE 'CREATE OR REPLACE TRIGGER ' END;
+		IF (v<=13 AND EXISTS (
+			SELECT * FROM pg_trigger JOIN pg_class ON tgrelid = pg_class.oid JOIN pg_namespace ON relnamespace = pg_namespace.oid
+			 WHERE nspname = NEW.src_schema AND relname = NEW.src_table AND tgname = NEW.src_table || '_afk'
+		)) THEN
+			RETURN NEW;
+		END IF;
 		
 		EXECUTE cmd || quote_ident(NEW.src_table || '_afk' ) 
 		     || ' BEFORE INSERT OR UPDATE ON ' || quote_ident(NEW.src_schema) || '.' || quote_ident(NEW.src_table)
@@ -55,6 +61,13 @@ CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_i () RETURNS TRIGGER LANGUAG
 	BEGIN
 		v = regexp_replace(version(),'PostgreSQL (\d+).*$','\1')::int;
 		cmd = CASE WHEN v <=13 THEN 'CREATE TRIGGER ' ELSE 'CREATE OR REPLACE TRIGGER ' END;
+		IF (v<=13 AND EXISTS (
+			SELECT * FROM pg_trigger JOIN pg_class ON tgrelid = pg_class.oid JOIN pg_namespace ON relnamespace = pg_namespace.oid
+			 WHERE nspname = NEW.src_schema AND relname = NEW.src_table AND tgname = NEW.src_table || '_bfk'
+		)) THEN
+			RETURN NEW;
+		END IF;
+
 		
 		EXECUTE cmd || quote_ident(NEW.src_table || '_bfk' ) 
 		     || ' BEFORE INSERT OR UPDATE ON ' || quote_ident(NEW.src_schema) || '.' || quote_ident(NEW.src_table)
