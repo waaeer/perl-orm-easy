@@ -685,7 +685,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		}
   	}
 	if($query->{with_can_update} || $query->{with_permissions}) { # ensure compatibility
-		foreach my $o (@{$ret{list}}) {
+		foreach my $o (@$list) {
 			$o->{can_edit} = $o->{can_update};
     	}
     }
