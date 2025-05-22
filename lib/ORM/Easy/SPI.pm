@@ -39,7 +39,7 @@ sub unbless_arrays_in_rows {
 }
 sub parse_bool {
 	my $v = shift;
-	return defined($v) ? ($v eq 't' || $v eq 'true' ? 1 : 0 ) : undef;
+	return defined($v) ? ($v eq 't' || $v eq 'true' || $v eq '1' ? 1 : 0 ) : undef;
 }
 
 sub parse_daterange {

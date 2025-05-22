@@ -122,7 +122,7 @@ CREATE OR REPLACE FUNCTION auth_interface.add_role(user_id idtype, grantee_id id
 		INSERT INTO auth.user_roles ("user", created_by, changed_by, role,  objects, expires) VALUES (grantee_id, user_id, user_id, role_id,  objects_, expires_)
 				 RETURNING id INTO inserted_id;
 		IF inserted_id IS NOT NULL THEN 
-			RAISE NOTICE 'inserted user_roles % by %; check permission', inserted_id, user_id;
+			RAISE NOTICE 'inserting user_roles %: role % by % to % on %; ', inserted_id, role_id, user_id, grantee_id, objects_;
 			role_checker = 'can_add_role_' || role_name;
 			EXECUTE 'select auth.' || quote_ident(role_checker) || '($1, $2, $3)' INTO can_do USING user_id, grantee_id, objects_;
 			IF NOT can_do THEN 

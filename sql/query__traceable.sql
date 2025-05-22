@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION orm.query__traceable (user_id idtype, q jsonb, query jsonb) RETURNS jsonb STABLE LANGUAGE PLPERL 
-   TRANSFORM FOR TYPE jsonb
+   TRANSFORM FOR TYPE jsonb, FOR TYPE bool
 AS $$
 	my ($user_id, $q, $query) = @_;
 

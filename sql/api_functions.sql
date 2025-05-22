@@ -1,17 +1,17 @@
 CREATE OR REPLACE FUNCTION orm_interface.mget(schema text, tablename text, user_id idtype, page int, pagesize int, query jsonb) 
-	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS 
+	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS 
 $perl$
 	return ORM::Easy::SPI::_mget(@_);
  $perl$;
 
 CREATE OR REPLACE FUNCTION orm_interface.save (schema text, tablename text, id text, user_id idtype, data jsonb, context jsonb)  
- 	RETURNS json_pair LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb  AS $perl$
+ 	RETURNS json_pair LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb, FOR TYPE bool  AS $perl$
    	return ORM::Easy::SPI::_save(@_);
 $perl$;
 
 
 CREATE OR REPLACE FUNCTION orm_interface.jsonarray2daterange (val jsonb)  
- 	RETURNS daterange LANGUAGE PLPERL IMMUTABLE PARALLEL SAFE TRANSFORM FOR TYPE jsonb  AS $perl$
+ 	RETURNS daterange LANGUAGE PLPERL IMMUTABLE PARALLEL SAFE TRANSFORM FOR TYPE jsonb, FOR TYPE bool  AS $perl$
    	return ORM::Easy::SPI::array2daterange(@_);
 $perl$;
 
@@ -21,12 +21,12 @@ CREATE OR REPLACE FUNCTION orm_interface.jsonarray2idtypearray (val jsonb)
 $$;
 
 CREATE OR REPLACE FUNCTION orm_interface.delete (schema text, tablename text, id text, user_id idtype, context jsonb)  
-	RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb AS $perl$
+	RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS $perl$
    	return ORM::Easy::SPI::_delete(@_);
 $perl$;
 
 CREATE OR REPLACE FUNCTION orm_interface.set_order (schema text, tablename text, ids jsonb, field text, user_id idtype, context jsonb)  
-	RETURNS jsonb LANGUAGE PLPERL TRANSFORM FOR TYPE jsonb  SECURITY DEFINER AS $perl$
+	RETURNS jsonb LANGUAGE PLPERL TRANSFORM FOR TYPE jsonb, FOR TYPE bool  SECURITY DEFINER AS $perl$
 
     my ($schema, $tablename, $ids, $fld, $user_id, $context) = @_;
 #	warn "Called set_order($schema, $tablename, $ids, $fld, $user_id, $context)\n";
@@ -46,7 +46,7 @@ CREATE OR REPLACE FUNCTION orm_interface.set_order (schema text, tablename text,
 $perl$;
 
 CREATE OR REPLACE FUNCTION orm_interface.set_order_parent (schema text, tablename text, ids jsonb, field text, parent_field text, parent_id idtype, user_id idtype, context jsonb)  
-	RETURNS jsonb LANGUAGE PLPERL TRANSFORM FOR TYPE jsonb  SECURITY DEFINER AS $perl$
+	RETURNS jsonb LANGUAGE PLPERL TRANSFORM FOR TYPE jsonb, FOR TYPE bool  SECURITY DEFINER AS $perl$
 
     my ($schema, $tablename, $ids, $fld, $parent_fld, $parent_id, $user_id, $context) = @_;
 #	warn "Called set_order_parent, ($schema, $tablename, [".($ids?join(',',@$ids):'NULL')."], $fld, $parent_fld, $parent_id, $user_id, $context)\n";
@@ -80,7 +80,7 @@ CREATE OR REPLACE FUNCTION orm_interface.msave (schema text, tablename text, use
 $$;
 
 CREATE OR REPLACE FUNCTION orm_interface.treeget(schema text, tablename text, user_id idtype, query jsonb)
-	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS
+	RETURNS jsonb SECURITY DEFINER LANGUAGE plperl TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS
 $perl$
   my ($schema, $tablename, $user_id, $query) = @_;
   my $plain = delete $query->{__plain};

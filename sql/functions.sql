@@ -1,6 +1,6 @@
 
 CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb 
-		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb AS $$
+		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS $$
 	my ($o, $path, $v, $to_create) = @_;
 	$path = $path->{array};
 	my $curr_o = \$o;

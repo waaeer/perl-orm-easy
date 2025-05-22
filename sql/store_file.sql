@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION orm_interface.store_file (schema text, tablename text, user_id idtype, data jsonb)  
- 		RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb  AS $perl$
+ 		RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS $perl$
 
 	my ($schema, $tablename, $user_id, $f) = @_;
 
@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION orm_interface.store_file (schema text, tablename text
 $perl$;
 
 CREATE OR REPLACE FUNCTION orm_interface.store_user_file (schema text, tablename text, user_id idtype, data jsonb)  
- 		RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb  AS $perl$
+ 		RETURNS jsonb LANGUAGE PLPERL SECURITY DEFINER TRANSFORM FOR TYPE jsonb, FOR TYPE bool  AS $perl$
 
 	my ($schema, $tablename, $user_id, $f) = @_;
 
