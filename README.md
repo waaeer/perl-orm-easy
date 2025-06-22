@@ -277,10 +277,10 @@ The main table in the query has an `m` alias.
 	DECLARE n int;
     BEGIN
       IF query ? 'search' THEN 
-		n = json_array_length(internal_data->>'bind');
-		internal_data = jsonb_set(internal_data, ARRAY['wheres',  1000000 ], format('m.ts_vector && @@ to_tsquery($%s::text))', n);
-		internal_data = jsonb_set(internal_data, ARRAY['bind',    1000000 ], query->>'search';
-		internal_data = jsonb_set(internal_data, ARRAY['types',   1000000 ], 'text';
+		n = jsonb_array_length(internal_data->'bind')+1;
+		internal_data = jsonb_set(internal_data, ARRAY['wheres',  '1000000' ], to_jsonb(format('m.ts_vector && @@ to_tsquery($%s::text)', n)));
+		internal_data = jsonb_set(internal_data, ARRAY['bind',    '1000000' ], query->'search');
+		internal_data = jsonb_set(internal_data, ARRAY['types',   '1000000' ], to_jsonb('text'));
 	  END IF;
       RETURN internal_data;
     END;
