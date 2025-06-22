@@ -274,7 +274,7 @@ The main table in the query has an `m` alias.
 *Example* of a function adding full text search function for a `cms.news` table (supposing it has a `ts_vector` field).
 
     CREATE FUNCTION cms.query_news (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$
-	DEFINE n int;
+	DECLARE n int;
     BEGIN
       IF query ? 'search' THEN 
 		n = json_array_length(internal_data->>'bind');
