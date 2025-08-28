@@ -635,28 +635,28 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
   }
   if($list) {
 #### For Pg < 13 without transforms for bool: fix bools in rows manually
-  	my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
-		SELECT attname
-		FROM pg_attribute a
-		JOIN pg_type t ON a.atttypid = t.oid
-		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
-		  AND a.attnum>0
-		  AND NOT a.attisdropped
-		  AND t.typcategory = 'B'
-	 !, [ 'text', 'text'],
-	   [ $schema, $tablename]
-	)->{rows};
-
-	if($bool_fields && @$bool_fields) {
-		foreach my $o (@$list) {
-			foreach my $f (@$bool_fields) {
-				my $fn = $f->{attname};
-				if(defined $o->{$fn}) {
-					$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
-				}
-			}
-		}
-	}
+#  	my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
+#		SELECT attname
+#		FROM pg_attribute a
+#		JOIN pg_type t ON a.atttypid = t.oid
+#		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
+#		  AND a.attnum>0
+#		  AND NOT a.attisdropped
+#		  AND t.typcategory = 'B'
+#	 !, [ 'text', 'text'],
+#	   [ $schema, $tablename]
+#	)->{rows};
+#
+#	if($bool_fields && @$bool_fields) {
+#		foreach my $o (@$list) {
+#			foreach my $f (@$bool_fields) {
+#				my $fn = $f->{attname};
+#				if(defined $o->{$fn}) {
+#					$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
+#				}
+#			}
+#		}
+#	}
 
 ### While no transform for spoint:
 

@@ -16,7 +16,7 @@ CREATE TABLE orm.abstract_foreign_key (
 	PRIMARY KEY (src_schema,  src_table, src_field, dst_schema, dst_table)
 );
 
-CREATE OR REPLACE FUNCTION orm.array_foreign_key_i () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.array_foreign_key_i () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plpgsql AS $$
     DECLARE v int;
     	cmd text;
 	BEGIN
@@ -39,7 +39,7 @@ CREATE OR REPLACE FUNCTION orm.array_foreign_key_i () RETURNS TRIGGER LANGUAGE p
 	END;
 $$;
 
-CREATE OR REPLACE FUNCTION orm.array_foreign_key_d () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.array_foreign_key_d () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plpgsql AS $$
 	BEGIN
 		IF NOT EXISTS (SELECT * FROM orm.array_foreign_key a WHERE a.src_schema = OLD.src_schema AND a.src_table = OLD.src_table) THEN
 		    EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(OLD.src_table || '_afk' ) 
@@ -54,7 +54,7 @@ CREATE OR REPLACE FUNCTION orm.array_foreign_key_d () RETURNS TRIGGER LANGUAGE p
 $$;
 
 
-CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_i () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_i () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plpgsql AS $$
 	DECLARE r RECORD;
         v int;
     	cmd text;
@@ -83,7 +83,7 @@ CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_i () RETURNS TRIGGER LANGUAG
 	END;
 $$;
 
-CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_d () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.abstract_foreign_key_d () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plpgsql AS $$
 	DECLARE r RECORD;
 	BEGIN
 		IF NOT EXISTS (SELECT * FROM orm.abstract_foreign_key a WHERE a.src_schema = OLD.src_schema AND a.src_table = OLD.src_table) THEN
@@ -106,7 +106,7 @@ CREATE TRIGGER array_foreign_key_d    BEFORE DELETE ON orm.array_foreign_key    
 CREATE TRIGGER abstract_foreign_key_i AFTER  INSERT ON orm.abstract_foreign_key FOR EACH ROW EXECUTE FUNCTION orm.abstract_foreign_key_i();
 CREATE TRIGGER abstract_foreign_key_d BEFORE DELETE ON orm.abstract_foreign_key FOR EACH ROW EXECUTE FUNCTION orm.abstract_foreign_key_d();
 
-CREATE OR REPLACE FUNCTION orm.check_outgoing_abstract_refs () RETURNS TRIGGER LANGUAGE plperl AS $$
+CREATE OR REPLACE FUNCTION orm.check_outgoing_abstract_refs () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plperl AS $$
     foreach my $r (@{
         ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.abstract_foreign_key WHERE src_schema = $1 AND src_table = $2 !, ['text', 'text'], [$_TD->{table_schema}, $_TD->{table_name}])->{rows}
     }) { 
@@ -121,7 +121,7 @@ CREATE OR REPLACE FUNCTION orm.check_outgoing_abstract_refs () RETURNS TRIGGER L
     return;
 $$;
 
-CREATE OR REPLACE FUNCTION orm.check_incoming_abstract_refs() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.check_incoming_abstract_refs() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plpgsql AS $$
 DECLARE has_ref bool;
 		r RECORD;
 BEGIN
@@ -137,7 +137,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION orm.check_outgoing_array_refs () RETURNS TRIGGER LANGUAGE plperl AS $$
+CREATE OR REPLACE FUNCTION orm.check_outgoing_array_refs () RETURNS TRIGGER  SECURITY DEFINER LANGUAGE plperl AS $$
     foreach my $r (@{
         ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.array_foreign_key WHERE src_schema = $1 AND src_table = $2 !, ['text', 'text'], [$_TD->{table_schema}, $_TD->{table_name}])->{rows}
     }) { 
@@ -157,7 +157,7 @@ CREATE OR REPLACE FUNCTION orm.check_outgoing_array_refs () RETURNS TRIGGER LANG
     return;		
 $$;
 
-CREATE OR REPLACE FUNCTION orm.check_incoming_array_refs () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION orm.check_incoming_array_refs () RETURNS TRIGGER SECURITY DEFINER LANGUAGE plpgsql AS $$
 DECLARE has_ref BOOL;
     r RECORD;
 BEGIN
