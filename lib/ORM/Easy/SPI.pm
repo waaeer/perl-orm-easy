@@ -346,6 +346,7 @@ sub generate_query_parts {
   }
 
 warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query->{__debug};
+warn "debug field_types_by_attr ", Data::Dumper::Dumper(\%field_types_by_attr) if $query->{__debug};
   foreach my $f (keys %$query) {
 	warn "f=$f t=$field_types_by_attr{$f} v=$query->{$f};\n" if $query->{__debug};
 	if(my $type = $field_types_by_attr{$f}) {
@@ -629,7 +630,7 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
   if (!$query->{without_count}) {
 	my $l = $list ? @$list : 0;
 	$ret{n} =
-		($l < $pagesize)
+		($l > 0 && $l < $pagesize)
 		? ($page-1)*$pagesize + $l
 		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }

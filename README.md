@@ -237,15 +237,18 @@ Special options are listed below:
 
 User 128 selects persons with specified identifiers in the specified order.
 
-    SELECT auth_interface.mget('crm', 'person', 128, 1, null, '{"id": [ 15,16,17], "_order" : "specified" , "without_count": true}');
+    SELECT auth_interface.mget('crm', 'person', 128, 1, null, 
+       '{"id": [ 15,16,17], "_order" : "specified" , "without_count": true}');
 
 User 129 selects 10 first persons with last_names starting with 'Stone' born in 1992 sorted by their birthdays.
 
-	SELECT auth_interface.mget('crm', 'person', 129, 1, 10, '{"last_name": { "begins" : "Stone"}, "birthday": ["1992-01-01", "1993-01-01"]}');
+	SELECT auth_interface.mget('crm', 'person', 129, 1, 10, 
+	   '{"last_name": { "begins" : "Stone"}, "birthday": ["1992-01-01", "1993-01-01"]}');
 
 User 130 reads 3rd page of the news on computers.
 
-	SELECT auth_interface.mget('cms', 'news', 130, 3, 20, '{"status" : "published", "_order": "-publication_date", "topic": "computers"}');
+	SELECT auth_interface.mget('cms', 'news', 130, 3, 20, 
+	   '{"status" : "published", "_order": "-publication_date", "topic": "computers"}');
 
 ### Extending mget
 
@@ -273,14 +276,18 @@ The main table in the query has an `m` alias.
 
 *Example* of a function adding full text search function for a `cms.news` table (supposing it has a `ts_vector` field).
 
-    CREATE FUNCTION cms.query_news (user_id idtype, internal_data jsonb, query jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$
+    CREATE FUNCTION cms.query_news (user_id idtype, internal_data jsonb, query jsonb) 
+       RETURNS jsonb LANGUAGE plpgsql AS $$
 	DECLARE n int;
     BEGIN
       IF query ? 'search' THEN 
 		n = jsonb_array_length(internal_data->'bind')+1;
-		internal_data = jsonb_set(internal_data, ARRAY['wheres',  '1000000' ], to_jsonb(format('m.ts_vector @@ to_tsquery($%s::text)', n)));
-		internal_data = jsonb_set(internal_data, ARRAY['bind',    '1000000' ], query->'search');
-		internal_data = jsonb_set(internal_data, ARRAY['types',   '1000000' ], to_jsonb('text'));
+		internal_data = jsonb_set(internal_data, ARRAY['wheres',  '1000000' ], 
+		         to_jsonb(format('m.ts_vector @@ to_tsquery($%s::text)', n)));
+		internal_data = jsonb_set(internal_data, ARRAY['bind',    '1000000' ],
+		         query->'search');
+		internal_data = jsonb_set(internal_data, ARRAY['types',   '1000000' ],
+		         to_jsonb('text'));
 	  END IF;
       RETURN internal_data;
     END;
@@ -324,11 +331,11 @@ The object identifier of the new object is taken from `object` JSON or, if not d
 
 The current user identifier
 
-### `object`
+#### `object`
 
 The object field names and their values to be saved.
 
-### `context`
+#### `context`
 
 A JSONB object for communications between several `save`s in a transaction or a script (see TRANSACTION SUPPORT below).
 
