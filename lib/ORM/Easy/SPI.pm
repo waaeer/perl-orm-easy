@@ -266,10 +266,10 @@ sub generate_query_parts {
 		[(keys %$query), (map { $_->[0] } @order_fields), ($query->{_fields} ? @{$query->{_fields}} : ()) ]
   );
 
-
   my %field_types_by_attr = map { $_->{attname} => $_->{t} } @$field_types;
 
   my %exclude_fields = $query->{_exclude_fields} ? map { $_=>1} @{$query->{_exclude_fields}} : ();
+
   if(my $flds = $query->{_fields}) {
 	$q->{select} = [map  { 'm.'.::quote_ident($_) }  @$flds];	
   } elsif(%exclude_fields) {
@@ -484,7 +484,6 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
   }
 
   if($query->{__subclasses}) {
-
 	# посмотрим, какие поля есть у подклассов данного класса
 	my $subclasses = ORM::Easy::SPI::spi_run_query(q! SELECT
 			schema || '.' || tablename AS classname,
@@ -498,28 +497,37 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 			) x) AS  fields
 		FROM orm.get_terminal_subclasses($1, $2) c
 	!, ['text', 'text'], [$schema, $tablename])->{rows};
-	my (%fields, %namespaces, %transforms);
+	my (%fields, %transforms);
+	if(my $s = $q->{subclasses}) {
+		my %h = map { $_=>1 } @$s;
+		$subclasses = [ grep { $h{ $_->{classname} } } @$subclasses ];
+	}
+	
 	foreach my $c (@$subclasses) {   ## соберем объединение всех полей, и заодно проверим совпадение типов одинаковых полей
 		foreach my $fld (@{$c->{fields}}) {
 			my $attname = $fld->{attname};
 			my $existing_type = $fields{$attname};
-			my $type = $fld->{typname};
-			my $nsp  = $fld->{nspname};
-			if($existing_type && ($type ne $existing_type || $nsp ne $namespaces{$attname})) {
+			my $type = ::quote_ident($fld->{nspname}) . '.' . ::quote_ident($fld->{typname}) ;
+			if($existing_type && $type ne $existing_type ) {
 				$transforms{$attname} = $existing_type;
 			}
-			if(!$existing_type) { $fields{$attname} = $type; $namespaces{$attname} = $nsp; }
+			if(!$existing_type) { $fields{$attname} = $type; }
 			($c->{by_field} ||= {})->{$attname} = 1;
 		}
 	}
 	my @fields = sort keys %fields;
+	my %selected = map { $_=>1 } @{ $q->{select} };
+	my $selected_all = $selected { "m.*" };
 	foreach my $c (@$subclasses) {   ## составим строчки выбираемых полей для всех подклассов
 		$c->{all_fields} = join(', ',  map {
 			$c->{by_field}->{$_} # если данное поле есть в таблице данного подкласса
 			? $_ . ( $transforms{$_} ? '::'.$transforms{$_} : '')
-			: 'NULL::'.::quote_ident($namespaces{$_}).'.'.::quote_ident($fields{$_}).' AS '.::quote_ident($_);
+			: 'NULL::'.$fields{$_}.' AS '.::quote_ident($_);
+		} grep {
+			$selected_all || $selected{ "m.".::quote_ident($_) }
 		} @fields);
 	}
+	
 #warn "subclasses=".Data::Dumper::Dumper($subclasses);
 	if(!@$subclasses) {
 		die("Class $schema.$tablename has no subclasses");
@@ -619,8 +627,8 @@ sub _mget {
 
   my $debug = $query->{__debug};  # foDo: check permissions
   my $list;
-warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize, $query)\n" if $debug;
-warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetypes, $q->{bind}, \@pagebind) if $debug;
+warn "debug mget ($schema, $tablename, $user_id, $page, $pagesize)\n" if $debug;
+warn  Data::Dumper::Dumper($q, $query), "sql=$sql\n", Data::Dumper::Dumper( [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ]) if $debug;
   my %ret;
   if(!defined($pagesize) || $pagesize>0) {
 	$list = ORM::Easy::SPI::spi_run_query($sql, [@{$q->{types}}, @pagetypes ], [@{$q->{bind}}, @pagebind ] )->{rows};
@@ -635,29 +643,6 @@ warn "sql=$sql\n", Data::Dumper::Dumper($q,$query, $sql, $q->{types}, \@pagetype
 		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
   }
   if($list) {
-#### For Pg < 13 without transforms for bool: fix bools in rows manually
-#  	my $bool_fields = ORM::Easy::SPI::spi_run_query(q!
-#		SELECT attname
-#		FROM pg_attribute a
-#		JOIN pg_type t ON a.atttypid = t.oid
-#		WHERE a.attrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE relname = $2 AND n.nspname = $1)
-#		  AND a.attnum>0
-#		  AND NOT a.attisdropped
-#		  AND t.typcategory = 'B'
-#	 !, [ 'text', 'text'],
-#	   [ $schema, $tablename]
-#	)->{rows};
-#
-#	if($bool_fields && @$bool_fields) {
-#		foreach my $o (@$list) {
-#			foreach my $f (@$bool_fields) {
-#				my $fn = $f->{attname};
-#				if(defined $o->{$fn}) {
-#					$o->{$fn} = $o->{$fn} eq 'f' || !$o->{$fn} ? 0 : 1;
-#				}
-#			}
-#		}
-#	}
 
 ### While no transform for spoint:
 
