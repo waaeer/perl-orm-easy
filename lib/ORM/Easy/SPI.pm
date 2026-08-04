@@ -215,7 +215,8 @@ sub generate_query_parts {
   my ($schema, $tablename, $user_id, $query) = @_;
   my $q = {
 	table=>::quote_ident($schema).'.'.::quote_ident($tablename),
-	wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[], group=>[], aggr=>[]
+	wheres=>[], bind=>[], select=>[], outer_select=>['m.*'], select_from_subclasses=>[], 
+	joins=>[], left_joins=>[], internal_left_joins=>[], order=>[], ext_order=>[], types=>[], with=>[], group=>[], aggr=>[]
   };
 # простые поля
 #  ...
@@ -497,31 +498,31 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 			) x) AS  fields
 		FROM orm.get_terminal_subclasses($1, $2) c
 	!, ['text', 'text'], [$schema, $tablename])->{rows};
-	my (%fields, %transforms);
+	my (%fields, %casts);
 	if(my $s = $q->{subclasses}) {
 		my %h = map { $_=>1 } @$s;
 		$subclasses = [ grep { $h{ $_->{classname} } } @$subclasses ];
 	}
 	
-	foreach my $c (@$subclasses) {   ## соберем объединение всех полей, и заодно проверим совпадение типов одинаковых полей
+	foreach my $c (@$subclasses) {   ## соберем объединение всех полей, и заодно проверим совпадение типов одинаково называемых полей
 		foreach my $fld (@{$c->{fields}}) {
 			my $attname = $fld->{attname};
 			my $existing_type = $fields{$attname};
 			my $type = ::quote_ident($fld->{nspname}) . '.' . ::quote_ident($fld->{typname}) ;
 			if($existing_type && $type ne $existing_type ) {
-				$transforms{$attname} = $existing_type;
+				$casts{$attname} = $existing_type;
 			}
 			if(!$existing_type) { $fields{$attname} = $type; }
 			($c->{by_field} ||= {})->{$attname} = 1;
 		}
 	}
 	my @fields = sort keys %fields;
-	my %selected = map { $_=>1 } @{ $q->{select} };
+	my %selected = map { $_=>1 } ( @{ $q->{select}} , @{$q->{select_from_subclasses}} );
 	my $selected_all = $selected { "m.*" };
 	foreach my $c (@$subclasses) {   ## составим строчки выбираемых полей для всех подклассов
 		$c->{all_fields} = join(', ',  map {
 			$c->{by_field}->{$_} # если данное поле есть в таблице данного подкласса
-			? $_ . ( $transforms{$_} ? '::'.$transforms{$_} : '')
+			? $_ . ( $casts{$_} ? '::'.$casts{$_} : '')
 			: 'NULL::'.$fields{$_}.' AS '.::quote_ident($_);
 		} grep {
 			$selected_all || $selected{ "m.".::quote_ident($_) }
