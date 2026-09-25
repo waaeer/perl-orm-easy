@@ -1,3 +1,10 @@
+liborm-easy-perl (0.7) unstable; urgency=medium
+
+  * deep merge of json field during save, allows to save separate microfields inside json superfields
+  * map names to ids in array field queries
+
+ -- Ivan Panchenko <wao@mail.ru>  Sat, 26 Feb 2026 00:45:00 +0300
+
 liborm-easy-perl (0.6) unstable; urgency=medium
 
   * added abstract and array references processing

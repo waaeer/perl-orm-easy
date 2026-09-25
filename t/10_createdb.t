@@ -7,6 +7,7 @@ use Encode;
 use Cwd;
 
 my $dir = getcwd() . "/blib/lib";
+
 my $pgsql = eval { Test::PostgreSQL->new( pg_config => qq|
  plperl.use_strict = on
  plperl.on_init    = 'use lib "$dir"; use ORM::Easy::SPI;'
@@ -14,7 +15,7 @@ my $pgsql = eval { Test::PostgreSQL->new( pg_config => qq|
        |) }
         or plan skip_all => $@;
  
-plan tests =>16; 
+plan tests =>18; 
 
 my $dbh = DBI->connect($pgsql->dsn, undef, undef, {RaiseError => 1});
 ok(1);
@@ -36,7 +37,7 @@ $pgsql -> run_psql('-f', 'sql/query__traceable.sql');
 $pgsql -> run_psql('-f', 'sql/foreign_keys.sql');
 ok(1);
 
-$dbh->do(q!CREATE TABLE public.object(id idtype, name text, x int) INHERITS (orm._traceable)!);
+$dbh->do(q!CREATE TABLE public.object(id idtype, name text, x int, z jsonb) INHERITS (orm._traceable)!);
 $dbh->do(q!INSERT INTO orm.metadata(name, public_readable) VALUES ('public.object', true)!);
 $dbh->do(q!CREATE FUNCTION public.can_insert_object(user_id idtype, id_ text, data jsonb) RETURNS bool LANGUAGE plpgsql AS $$
 	BEGIN
@@ -71,6 +72,22 @@ is(normalize_json( $dbt->selectcol_arrayref(qq!SELECT orm_interface.mget('public
    normalize_json( {n=> "100", list => [ { id=>"1",name => 'xyz'}, { id=>"2",name => 'xyz'}, { id=>"3",name => 'x3'}, { id=>"4",name => 'x4'}]}),
    'msaved'
 );
+
+# test json merge
+my $json1 = '{"a":1,"b":2, "c":{"d":3,"e":4}}';
+$dbt->do(qq!SELECT orm_interface.save('public','object', '1', 0, '{"z": { "||" : $json1}}','{}')!);
+
+is(normalize_json( $dbt->selectcol_arrayref(qq!SELECT orm_interface.mget('public', 'object', 0, 1, 1, '{"id":1}')->'list'->0->>'z'!)->[0]),
+   normalize_json( $json1),
+   'json merge overwrites NULL'
+);
+
+$dbt->do(qq!SELECT orm_interface.save('public','object', '1', 0, '{"z": { "||" : {"y":11,"c":{"d":5}}}}', '{}')!);
+is(normalize_json( $dbt->selectcol_arrayref(qq!SELECT orm_interface.mget('public', 'object', 0, 1, 1, '{"id":1}')->'list'->0->>'z'!)->[0]),
+   normalize_json( '{"a":1,"b":2, "c":{"d":5,"e":4},"y":11}'),
+   'json merge'
+);
+   
 
 $dbh->do(qq!CREATE TABLE public.test_table (id idtype, a text, b date, c daterange)!);
 $dbh->do(q!CREATE FUNCTION public.can_insert_test_table(user_id idtype, id_ text, data jsonb) RETURNS bool LANGUAGE sql AS $$ SELECT true; $$!);

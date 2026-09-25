@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb, to_create bool) RETURNS jsonb 
 		STABLE LANGUAGE plperl TRANSFORM FOR TYPE jsonb, FOR TYPE bool AS $$
 	my ($o, $path, $v, $to_create) = @_;
@@ -9,7 +8,7 @@ CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb,
 		my $key_is_number =  Scalar::Util::looks_like_number($x);
 		if(!${$curr_o}) { 
 			if(!$to_create) { 
-				return $o; # Encode::decode_utf8($json->encode($o)); 
+				return $o;  
 			}
 			${$curr_o} = $key_is_number ? [] : {};
 		}
@@ -19,11 +18,41 @@ CREATE OR REPLACE FUNCTION jsonb_set_correct( o jsonb, path text[], value jsonb,
 			$curr_o = \((${$curr_o})->{$x});
 		} else { 
 			warn "key '$x' type mismatch";
-			return $o; # Encode::decode_utf8($json->encode($o));
+			return $o;
 		}
 	}
 	${$curr_o} = $v;
 	return $o;
+$$;
+
+CREATE OR REPLACE FUNCTION jsonb_deep_merge(left_jsonb jsonb, right_jsonb jsonb) RETURNS jsonb IMMUTABLE LANGUAGE plpgsql AS $$
+DECLARE
+    result jsonb;
+    key    text;
+    value  jsonb;
+BEGIN
+    -- If either input is not a JSON object, the right side overwrites the left side
+    IF left_jsonb IS NULL OR jsonb_typeof(left_jsonb) != 'object' OR jsonb_typeof(right_jsonb) != 'object' THEN
+        RETURN right_jsonb;
+    END IF;
+
+    -- Initialize result with the left JSONB object
+    result := left_jsonb;
+
+    -- Loop through all key-value pairs of the right JSONB object
+    FOR key, value IN SELECT * FROM jsonb_each(right_jsonb)
+    LOOP
+        -- If the key exists in both and both are objects, recurse deeper
+        IF result ? key AND jsonb_typeof(result -> key) = 'object' AND jsonb_typeof(value) = 'object' THEN
+            result := jsonb_set(result, ARRAY[key], jsonb_deep_merge(result -> key, value));
+        ELSE
+            -- Otherwise, simply add or overwrite the top-level key
+            result := result || jsonb_build_object(key, value);
+        END IF; 
+    END LOOP;
+
+    RETURN result;
+END;
 $$;
 
 

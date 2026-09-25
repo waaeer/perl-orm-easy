@@ -349,7 +349,7 @@ sub generate_query_parts {
 warn "debug after query_* pretriggers (", Data::Dumper::Dumper($query) if $query->{__debug};
 warn "debug field_types_by_attr ", Data::Dumper::Dumper(\%field_types_by_attr) if $query->{__debug};
   foreach my $f (keys %$query) {
-	warn "f=$f t=$field_types_by_attr{$f} v=$query->{$f};\n" if $query->{__debug};
+	warn Data::Dumper::Dumper($f, $field_types_by_attr{$f}, $query->{$f}) if $query->{__debug};
 	if(my $type = $field_types_by_attr{$f}) {
 		my $v = $query->{$f};
 		if(ref($v) eq 'ARRAY') {
@@ -368,6 +368,18 @@ warn "debug field_types_by_attr ", Data::Dumper::Dumper(\%field_types_by_attr) i
 				push @{$q->{wheres}}, sprintf('m.%s && $%d', ::quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}},  $type->[0].'.'.$type->[1];
 				push @{$q->{bind}},  $v;
+			} elsif($type->[3] eq 'N' && scalar(grep { ! /^-?\d+/ } @$v) && $type->[4]) {# if type is integer, value is array containing not-a-number and the field is referencing another table, resolve the not-a-numbers as referenced object names
+				my (@int_values, @not_numbers);
+				foreach (@$v) {
+					if (/^-?\d+/) { push @int_values, $_; } else { push @not_numbers, $_; }
+				}	
+				my $qf = ::quote_ident($f);
+				my $bb = $#{$q->{bind}}+2;
+				push @{$q->{wheres}}, sprintf('(m.%s=ANY($%d) OR m.%s IN (SELECT id FROM %s.%s WHERE name=ANY($%d)))',
+					$qf, $bb, $qf, ::quote_ident($type->[4]),  ::quote_ident($type->[5]), $bb+1
+				);
+				push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]', 'text[]';
+				push @{$q->{bind}},  \@int_values, \@not_numbers;
 			} else {
 				push @{$q->{wheres}}, sprintf('m.%s=ANY($%d)', ::quote_ident($f), $#{$q->{bind}}+2 );
 				push @{$q->{types}},  $type->[0].'.'.$type->[1].'[]';
@@ -403,11 +415,11 @@ warn "debug field_types_by_attr ", Data::Dumper::Dumper(\%field_types_by_attr) i
 					my $qn = ::quote_ident($f);
 					push @{$q->{wheres}}, sprintf('(NOT (m.%s && $%d) OR m.%s IS NULL)', $qn, $#{$q->{bind}}+2, $qn );
 					push @{$q->{types}},  $type->[0].'.'.$type->[1];
-					push @{$q->{bind}},  $v;
+					push @{$q->{bind}},  $vv;
 				}	else {
 					push @{$q->{wheres}}, sprintf('NOT m.%s=ANY($%d)', ::quote_ident($f), $#{$q->{bind}}+2 );
 					push @{$q->{types}}, $type->[0].'.'.$type->[1].'[]';
-					push @{$q->{bind}},  $vv;
+					push @{$q->{bind}},  ref($vv) eq 'ARRAY' ? $vv : [$vv];
 				}
 			} elsif($v->{not_null}) {
 				push @{$q->{wheres}}, sprintf('m.%s IS NOT NULL', ::quote_ident($f) );
@@ -416,7 +428,7 @@ warn "debug field_types_by_attr ", Data::Dumper::Dumper(\%field_types_by_attr) i
 			}	
 		} else {
 			# if type is integer, value is not-a-number and the field is referencing another table, resolve it as a referenced object name
-			if($type->[3] eq 'N' && $v && ($ v!~ /^-?\d+/) && $type->[4]) {
+			if($type->[3] eq 'N' && $v && ($v!~ /^-?\d+/) && $type->[4]) {
 				push @{$q->{wheres}}, sprintf('m.%s=(SELECT id FROM %s.%s WHERE name=$%d)',
 					::quote_ident($f), ::quote_ident($type->[4]),  ::quote_ident($type->[5]), $#{$q->{bind}}+2
 				);
@@ -859,10 +871,20 @@ sub _save {
 		} elsif($type eq 'bool') {
             $exprs{$f} = defined $val ? ( $val ? 'true' : 'false' )  : 'NULL';
 			$n--;  # does not push args
-		} elsif ($type =~ /^jsonb?/) {
+		} elsif ($type =~ /^jsonb?$/) {
 			push @types, $type;
-			push @args,  defined($val) ? $val # ORM::Easy::SPI::to_json($val)
-			                           : undef;
+			if(defined($val)) {
+				if(ref($val) eq 'HASH' && (my $v = $val->{'||'})) {  # special key "||" means deep merge argument with existing object
+					$exprs{$f} = $op eq 'update' 
+							   ? 'jsonb_deep_merge(coalesce('.::quote_ident($f).",'{}'::".::quote_ident($type).")::jsonb , \$${n}::jsonb)"
+							   : "\$${n}::jsonb";
+					push @args, $v;
+				} else { 
+					push @args, $val;
+				}
+			} else {
+				push @args, undef;
+			}
 		} elsif (($typcat eq 'A' && $eltypecat eq 'N') && ref($val) eq 'HASH') {  # для числовых массивов
 			my ($expr_add, $expr_del, $vtype_add, $vtype_del);
 			if(my $v = $val->{add}) {
