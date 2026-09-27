@@ -653,7 +653,7 @@ warn  Data::Dumper::Dumper($q, $query), "sql=$sql\n", Data::Dumper::Dumper( [@{$
 	$ret{n} =
 		($l > 0 && $l < $pagesize)
 		? ($page-1)*$pagesize + $l
-		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind});
+		:  ORM::Easy::SPI::spi_run_query_value($nsql, $q->{types}, $q->{bind}) + 0;
   }
   if($list) {
 
