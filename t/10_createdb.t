@@ -62,14 +62,14 @@ foreach my $i (1..100) {
 }
 
 is(normalize_json( $dbh->selectcol_arrayref(qq!SELECT orm_interface.mget('public', 'object', 0, 1, 1, '{"x":7,"_fields":["id","name","x","created_by"]}')!)->[0]),
-   normalize_json( {n=> "1", list => [ { id=>"7", x=>"7", name => 'x7', created_by => "0" }]}),
+   normalize_json( {n=> 1, list => [ { id=>"7", x=>"7", name => 'x7', created_by => "0" }]}),
    'x7'
 );
 
 $dbt->do(qq!SELECT orm_interface.msave('public','object', 0, 1, 2, '{"_order":"id"}', '{"name":"xyz"}', '{}')!);
 
 is(normalize_json( $dbt->selectcol_arrayref(qq!SELECT orm_interface.mget('public', 'object', 0, 1, 4, '{"_order":"id","_fields":["id","name"]}')!)->[0]),
-   normalize_json( {n=> "100", list => [ { id=>"1",name => 'xyz'}, { id=>"2",name => 'xyz'}, { id=>"3",name => 'x3'}, { id=>"4",name => 'x4'}]}),
+   normalize_json( {n=>100, list => [ { id=>"1",name => 'xyz'}, { id=>"2",name => 'xyz'}, { id=>"3",name => 'x3'}, { id=>"4",name => 'x4'}]}),
    'msaved'
 );
 
