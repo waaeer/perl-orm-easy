@@ -111,6 +111,7 @@ CREATE OR REPLACE FUNCTION orm.check_outgoing_abstract_refs () RETURNS TRIGGER  
         ORM::Easy::SPI::spi_run_query(q! SELECT * FROM orm.abstract_foreign_key WHERE src_schema = $1 AND src_table = $2 !, ['text', 'text'], [$_TD->{table_schema}, $_TD->{table_name}])->{rows}
     }) { 
         my $v = $_TD->{new}{$r->{src_field}};
+        return unless defined $v;
         my $has_ref = ORM::Easy::SPI::spi_run_query_bool('SELECT EXISTS (SELECT * FROM '. quote_ident($r->{dst_schema}).'.'.quote_ident($r->{dst_table}).' WHERE id = $1)',
             ['idtype'], [$v]
         );
