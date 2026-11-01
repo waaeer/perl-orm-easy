@@ -488,12 +488,30 @@ warn "wheres are ". Data::Dumper::Dumper($q->{wheres}, $query) if $query->{__deb
 
   if(my $s=$query->{with_permissions}) {
 	my $bb = $#{$q->{bind}} + 2;
-	push @{$q->{outer_select}}, sprintf(q!
-		 orm.can_update_object($%d, $%d, m.id::text, NULL) as can_update,
-		 orm.can_delete_object($%d, $%d, m.id::text) as can_delete
-	!, $bb, $bb+1, $bb, $bb+1 );  #.
-	push @{$q->{types}}, 'idtype', 'text';
-    push @{$q->{bind}},  $user_id, ($query->{__subclasses} ? '__class' : "$schema.$tablename");
+	my $have_can_update = ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
+		[ 'name', 'name'], [ $schema, "can_update_$tablename"]);
+	my $have_can_delete = ORM::Easy::SPI::spi_run_query_bool(q!SELECT EXISTS(SELECT * FROM pg_proc p JOIN pg_namespace s ON p.pronamespace = s.oid WHERE p.proname = $2 AND s.nspname = $1)!,
+		[ 'name', 'name'], [ $schema, "can_delete_$tablename"]);
+	push @{$q->{types}}, 'idtype';
+	push @{$q->{bind}},  $user_id;
+	if (!$query->{__subclasses} && (!$have_can_update || ! $have_can_delete)) { 
+		push @{$q->{types}}, 'text';
+	    push @{$q->{bind}},  "$schema.$tablename";
+	}
+	if($have_can_update) { 
+		push @{$q->{outer_select}}, sprintf(q!%s.can_update_%s($%d, m.id::text, to_jsonb(m)) AS can_update!, ::quote_ident($schema), ::quote_ident($tablename), $bb); #.
+	} elsif($query->{__subclasses}) { 
+		push @{$q->{outer_select}}, sprintf(q!orm.can_update_object($%d, __class, m.id::text, NULL) as can_update!, $bb); #.
+	} else {
+		push @{$q->{outer_select}}, sprintf(q!orm.can_update_object($%d, $%d, m.id::text, NULL) as can_update!, $bb, $bb+1); #.
+	}
+	if($have_can_delete) { 
+		push @{$q->{outer_select}}, sprintf(q!%s.can_delete_%s($%d, m.id::text) AS can_delete!, ::quote_ident($schema), ::quote_ident($tablename), $bb); #.
+	} elsif($query->{__subclasses}) { 
+		push @{$q->{outer_select}}, sprintf(q!orm.can_delete_object($%d, __class, m.id::text) as can_delete!, $bb); #.
+	} else {
+		push @{$q->{outer_select}}, sprintf(q!orm.can_delete_object($%d, $%d, m.id::text) as can_delete!, $bb, $bb+1); #.
+	}			
   }
 
   if($query->{__subclasses}) {
